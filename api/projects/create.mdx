@@ -1,0 +1,187 @@
+---
+title: 'Create Project with Prompt'
+api: 'POST /api/projects/create-with-prompt'
+description: 'Create a new project from an AI prompt that generates initial code and setup'
+---
+
+This endpoint creates a new project using an AI prompt. The system will:
+1. Validate the user has sufficient credits
+2. Generate a unique project name
+3. Create the project and initial conversation
+4. Process the prompt to generate code
+
+## Authentication
+
+Requires a valid Clerk authentication session. Unauthenticated requests will receive a `401 Unauthorized` response.
+
+## Request Body
+
+<ParamField body="prompt" type="string" required>
+  The AI prompt describing what to build. Must be at least 1 character long.
+  
+  **Example:** "Build a todo app with React and TypeScript"
+</ParamField>
+
+<ParamField body="source" type="string">
+  Tracks where the project creation was initiated from. Used for analytics.
+  
+  **Options:**
+  - `landing` - Created from landing page
+  - `dashboard_home` - Created from dashboard home page
+</ParamField>
+
+## Response
+
+<ResponseField name="projectId" type="string" required>
+  The unique identifier for the newly created project. This is a Convex ID that can be used to reference the project in subsequent API calls.
+  
+  **Format:** Convex ID string (e.g., `"jd7x8k9m2n5p6q8r"`) 
+</ResponseField>
+
+## Error Responses
+
+<Expandable title="Error Response Schema">
+  <ResponseField name="error" type="string">
+    Human-readable error message describing what went wrong.
+  </ResponseField>
+  
+  <ResponseField name="code" type="string">
+    Machine-readable error code for credit-related errors.
+    
+    **Possible values:**
+    - `no_subscription` - User has no active subscription
+    - `insufficient_credits` - User has run out of credits
+    - `daily_limit_reached` - Daily usage limit exceeded
+  </ResponseField>
+</Expandable>
+
+### 400 Bad Request
+
+Returned when the request body is invalid or missing required fields.
+
+```json
+{
+  "error": "Invalid request body"
+}
+```
+
+### 401 Unauthorized
+
+Returned when no valid authentication session is provided.
+
+```json
+{
+  "error": "Unauthorized"
+}
+```
+
+### 403 Forbidden
+
+Returned when the user doesn't have sufficient credits or an active subscription.
+
+```json
+{
+  "error": "You've reached your daily credit limit. Upgrade your plan or wait until tomorrow.",
+  "code": "daily_limit_reached"
+}
+```
+
+### 500 Internal Server Error
+
+Returned when there's a server configuration issue.
+
+```json
+{
+  "error": "Internal key not configured"
+}
+```
+
+## Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.rushed.ai/api/projects/create-with-prompt \
+  -H "Content-Type: application/json" \
+  -H "Cookie: __session=your_session_token" \
+  -d '{
+    "prompt": "Build a todo app with React and TypeScript. Include add, delete, and mark as complete functionality.",
+    "source": "dashboard_home"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/projects/create-with-prompt', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    prompt: 'Build a todo app with React and TypeScript. Include add, delete, and mark as complete functionality.',
+    source: 'dashboard_home'
+  })
+});
+
+const data = await response.json();
+console.log('Project ID:', data.projectId);
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.rushed.ai/api/projects/create-with-prompt',
+    json={
+        'prompt': 'Build a todo app with React and TypeScript. Include add, delete, and mark as complete functionality.',
+        'source': 'dashboard_home'
+    },
+    cookies={'__session': 'your_session_token'}
+)
+
+data = response.json()
+print('Project ID:', data['projectId'])
+```
+</CodeGroup>
+
+## Example Response
+
+```json 200 Success
+{
+  "projectId": "jd7x8k9m2n5p6q8r"
+}
+```
+
+## Implementation Details
+
+### Project Naming
+
+The system automatically generates a unique, human-readable project name using three random words (adjective-animal-color), such as:
+- `happy-dolphin-blue`
+- `brave-tiger-green`
+- `clever-owl-purple`
+
+### Credit Validation
+
+Before creating the project, the system checks:
+1. User has an active subscription
+2. User has available credits in their balance
+3. User hasn't exceeded their daily usage limit
+4. User hasn't exceeded their daily token limit
+
+### Async Processing
+
+The AI prompt is processed asynchronously after the project is created:
+1. A user message is created with the prompt
+2. An assistant message is created with `processing` status
+3. An Inngest event is triggered to process the message in the background
+4. The response is returned immediately with the project ID
+
+### Analytics Events
+
+The following analytics events are tracked:
+- `PROJECT_CREATED` - When project creation succeeds
+- `PROJECT_CREATION_FAILED` - When project creation fails (with reason)
+
+## Related Endpoints
+
+- [List Projects](/api/projects/list) - Retrieve all user projects
+- [Update Project](/api/projects/update) - Modify project settings

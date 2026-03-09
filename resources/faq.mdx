@@ -1,0 +1,308 @@
+---
+title: Frequently Asked Questions
+description: Common questions about Rushed AI platform, pricing, and usage
+icon: circle-question
+---
+
+## General Questions
+
+<AccordionGroup>
+  <Accordion title="What is Rushed AI?">
+    Rushed AI is an AI-powered development platform that helps you build applications faster using Claude Sonnet 4.5 and Haiku 4.5 models. It provides intelligent code generation, project management, and real-time AI assistance for your development workflow.
+  </Accordion>
+  
+  <Accordion title="Which AI models does Rushed AI use?">
+    Rushed AI uses Anthropic's Claude models:
+    
+    - **Claude Sonnet 4.5**: Advanced reasoning and code generation
+    - **Claude Haiku 4.5**: Fast, efficient responses for simpler tasks
+    
+    The platform automatically selects the appropriate model based on your task complexity.
+  </Accordion>
+  
+  <Accordion title="Is Rushed AI open source?">
+    Yes! Rushed AI is an open-source project. You can view the source code, contribute improvements, and report issues on GitHub.
+    
+    [View on GitHub](https://github.com/brayanj4y/rushed-ai)
+  </Accordion>
+  
+  <Accordion title="What technologies power Rushed AI?">
+    Rushed AI is built with modern web technologies:
+    
+    - **Frontend**: Next.js, React, TypeScript
+    - **Backend**: Convex (serverless backend)
+    - **AI**: Anthropic Claude API
+    - **Auth**: Clerk
+    - **Payments**: Dodo Payments
+  </Accordion>
+</AccordionGroup>
+
+## Pricing & Billing
+
+<AccordionGroup>
+  <Accordion title="How much does Rushed AI cost?">
+    Rushed AI offers three subscription tiers:
+    
+    - **Starter**: $19/month (50 credits)
+    - **Pro**: $49/month (150 credits)
+    - **Scale**: $99/month (400 credits)
+    
+    [View detailed pricing](/resources/pricing)
+  </Accordion>
+  
+  <Accordion title="What are credits and how do they work?">
+    Credits are the unit of consumption in Rushed AI. Each credit is worth $0.30 USD and is deducted based on your AI token usage.
+    
+    - Credits are calculated from input/output tokens
+    - Different models have different token costs
+    - Credits include a 3x markup over base API costs
+    
+    [Learn more about credits](/resources/credits)
+  </Accordion>
+  
+  <Accordion title="Do unused credits roll over to the next month?">
+    **Monthly credits**: No, monthly credits from your subscription do not roll over. They reset at the start of each billing period.
+    
+    **Credit pack credits**: Yes, credits purchased through credit packs persist across billing cycles and don't expire.
+  </Accordion>
+  
+  <Accordion title="Can I purchase additional credits?">
+    Yes! You can purchase credit packs at any time:
+    
+    - **Small Pack**: 50 credits for $10
+    - **Medium Pack**: 150 credits for $25
+    - **Large Pack**: 400 credits for $60
+    
+    Credit packs are added instantly to your balance.
+  </Accordion>
+  
+  <Accordion title="Can I change my subscription plan?">
+    Yes, you can upgrade or downgrade your plan at any time from your account settings. Changes take effect at the start of your next billing cycle.
+  </Accordion>
+  
+  <Accordion title="What payment methods do you accept?">
+    We accept all major payment methods through Dodo Payments:
+    
+    - Credit cards (Visa, Mastercard, American Express)
+    - Debit cards
+    - Digital wallets
+  </Accordion>
+  
+  <Accordion title="How do I cancel my subscription?">
+    You can cancel your subscription at any time from your account settings. Your subscription will remain active until the end of your current billing period.
+  </Accordion>
+</AccordionGroup>
+
+## Credits & Usage
+
+<AccordionGroup>
+  <Accordion title="What are daily limits and why do they exist?">
+    Daily limits prevent unexpected costs and overspending:
+    
+    - **Daily Credit Cap**: Maximum credits per day (3, 8, or 18 based on plan)
+    - **Daily Token Limit**: Maximum tokens per day (40K, 120K, or 250K based on plan)
+    
+    Both limits reset at 00:00 UTC daily.
+  </Accordion>
+  
+  <Accordion title="What happens when I hit my daily limit?">
+    When you reach either your daily credit cap or token limit, you'll receive an error message. You'll need to wait until the next daily reset (00:00 UTC) to continue using the platform, or upgrade to a plan with higher limits.
+  </Accordion>
+  
+  <Accordion title="How can I check my credit balance?">
+    You can view your current credit balance, daily usage, and transaction history in your account dashboard.
+  </Accordion>
+  
+  <Accordion title="How are credits deducted?">
+    Credits are deducted in this order:
+    
+    1. Monthly credits from your subscription (consumed first)
+    2. Credit pack credits (consumed after monthly credits depleted)
+    
+    This ensures your monthly allocation is used before dipping into purchased packs.
+  </Accordion>
+  
+  <Accordion title="Why was I charged more/less credits than expected?">
+    Credit consumption depends on:
+    
+    - Which model was used (Sonnet costs more than Haiku)
+    - Number of input tokens (your prompts)
+    - Number of output tokens (AI responses)
+    
+    Longer conversations and complex tasks consume more credits. Check your transaction history for detailed breakdowns.
+  </Accordion>
+</AccordionGroup>
+
+## Platform Features
+
+<AccordionGroup>
+  <Accordion title="What can I build with Rushed AI?">
+    Rushed AI supports building various types of applications:
+    
+    - Web applications
+    - APIs and backend services
+    - Full-stack projects
+    - UI components
+    - Scripts and automation tools
+    
+    The AI assists with code generation, debugging, refactoring, and implementation.
+  </Accordion>
+  
+  <Accordion title="Can I import existing projects?">
+    Yes! Rushed AI supports importing existing codebases. You can upload your project files and continue development with AI assistance.
+  </Accordion>
+  
+  <Accordion title="Can I export my projects?">
+    Yes, you can export your projects at any time. Your code belongs to you, and you have full control over your projects and files.
+  </Accordion>
+  
+  <Accordion title="How does the priority queue work?">
+    The Scale plan includes priority queue access, which means:
+    
+    - Your requests are processed faster during high-load periods
+    - You get preferential access to compute resources
+    - Lower latency for AI responses
+  </Accordion>
+  
+  <Accordion title="What file types are supported?">
+    Rushed AI supports common development file types including:
+    
+    - Code files (`.js`, `.ts`, `.tsx`, `.jsx`, `.py`, etc.)
+    - Config files (`.json`, `.yaml`, `.env`, etc.)
+    - Documentation (`.md`, `.mdx`)
+    - Styles (`.css`, `.scss`)
+    
+    Binary files can be stored but may not be editable through the AI interface.
+  </Accordion>
+</AccordionGroup>
+
+## Account & Security
+
+<AccordionGroup>
+  <Accordion title="How is my data secured?">
+    Rushed AI takes security seriously:
+    
+    - Authentication via Clerk (industry-standard auth)
+    - Encrypted data transmission (HTTPS)
+    - Secure database storage with Convex
+    - No sharing of your code with third parties
+  </Accordion>
+  
+  <Accordion title="Who has access to my code?">
+    Your code is private and only accessible to:
+    
+    - You (the project owner)
+    - The AI models (for generating responses, not for training)
+    
+    We do not use your code to train AI models or share it with other users.
+  </Accordion>
+  
+  <Accordion title="Can I delete my account?">
+    Yes, you can request account deletion by contacting support. This will permanently remove your account, projects, and associated data.
+  </Accordion>
+  
+  <Accordion title="How do I reset my password?">
+    Password management is handled by Clerk. Use the "Forgot Password" link on the sign-in page to reset your password.
+  </Accordion>
+</AccordionGroup>
+
+## Contributing & Support
+
+<AccordionGroup>
+  <Accordion title="How can I contribute to Rushed AI?">
+    We welcome contributions! You can:
+    
+    - Report bugs and issues on GitHub
+    - Submit feature requests
+    - Contribute code improvements
+    - Improve documentation
+    - Share feedback and suggestions
+    
+    [Read the contributing guide](/resources/contributing)
+  </Accordion>
+  
+  <Accordion title="Where can I report bugs?">
+    Please report bugs on our GitHub issue tracker:
+    
+    [Report a bug](https://github.com/brayanj4y/rushed-ai/issues/new)
+  </Accordion>
+  
+  <Accordion title="How do I request a new feature?">
+    Feature requests can be submitted as GitHub issues. Please include:
+    
+    - Clear description of the feature
+    - Use case and benefits
+    - Any relevant examples or mockups
+    
+    [Request a feature](https://github.com/brayanj4y/rushed-ai/issues/new)
+  </Accordion>
+  
+  <Accordion title="How can I get support?">
+    For support:
+    
+    - Check this FAQ and documentation first
+    - Search existing GitHub issues
+    - Open a new issue for technical problems
+    - Email support@rushed.ai for account/billing issues
+  </Accordion>
+  
+  <Accordion title="Is there a community or Discord?">
+    We're building our community! Check the GitHub repository for links to community channels and discussions.
+  </Accordion>
+</AccordionGroup>
+
+## Technical Questions
+
+<AccordionGroup>
+  <Accordion title="What are the system requirements?">
+    Rushed AI is a web-based platform accessible from any modern browser:
+    
+    - Chrome, Firefox, Safari, or Edge (latest versions)
+    - Stable internet connection
+    - JavaScript enabled
+  </Accordion>
+  
+  <Accordion title="Can I use Rushed AI offline?">
+    No, Rushed AI requires an internet connection as it relies on cloud-based AI models and backend services.
+  </Accordion>
+  
+  <Accordion title="What APIs does Rushed AI use?">
+    Rushed AI integrates with:
+    
+    - **Anthropic API**: Claude AI models
+    - **Clerk**: Authentication
+    - **Convex**: Serverless backend and database
+    - **Dodo Payments**: Payment processing
+  </Accordion>
+  
+  <Accordion title="Can I self-host Rushed AI?">
+    As an open-source project, you can fork and self-host Rushed AI. However, you'll need to:
+    
+    - Set up your own Anthropic API key
+    - Configure Clerk authentication
+    - Deploy Convex backend
+    - Handle your own infrastructure costs
+    
+    [View setup instructions](https://github.com/brayanj4y/rushed-ai)
+  </Accordion>
+</AccordionGroup>
+
+## Still Have Questions?
+
+<CardGroup cols={2}>
+  <Card title="View Documentation" icon="book" href="/introduction">
+    Explore comprehensive guides and tutorials
+  </Card>
+  
+  <Card title="Contact Support" icon="headset" href="mailto:support@rushed.ai">
+    Get in touch with our support team
+  </Card>
+  
+  <Card title="GitHub Issues" icon="github" href="https://github.com/brayanj4y/rushed-ai/issues">
+    Report bugs or request features
+  </Card>
+  
+  <Card title="View Pricing" icon="tag" href="/resources/pricing">
+    Learn more about plans and pricing
+  </Card>
+</CardGroup>

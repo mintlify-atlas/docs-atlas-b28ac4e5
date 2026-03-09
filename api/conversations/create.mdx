@@ -1,0 +1,131 @@
+---
+title: "Create Conversation"
+api: "POST /api/conversations/create"
+description: "Create a new conversation for a project to interact with the AI coding assistant"
+---
+
+## Overview
+
+Creates a new conversation within a project. Conversations are used to maintain context across multiple messages with the AI assistant. Each conversation belongs to a specific project and can contain multiple messages exchanged between the user and the AI.
+
+## Authentication
+
+This endpoint requires authentication via Clerk. The authenticated user must own the project.
+
+## Request Body
+
+<ParamField body="projectId" type="string" required>
+  The ID of the project to create the conversation in. Must be a valid Convex ID for the `projects` table.
+</ParamField>
+
+<ParamField body="title" type="string" required>
+  The title for the conversation. This will be displayed in the conversation list. If you don't have a specific title, you can use a default like "New Conversation" - the AI will automatically generate a better title based on the first message.
+</ParamField>
+
+## Response
+
+<ResponseField name="conversationId" type="string">
+  The unique ID of the newly created conversation. Use this ID to send messages and retrieve conversation history.
+</ResponseField>
+
+## Conversation Schema
+
+Conversations are stored with the following structure:
+
+<Expandable title="Conversation Table Schema">
+  <ResponseField name="_id" type="string">
+    Unique conversation identifier
+  </ResponseField>
+  
+  <ResponseField name="projectId" type="string">
+    Reference to the parent project
+  </ResponseField>
+  
+  <ResponseField name="title" type="string">
+    Conversation title (auto-generated or user-provided)
+  </ResponseField>
+  
+  <ResponseField name="updatedAt" type="number">
+    Timestamp of last update (Unix milliseconds)
+  </ResponseField>
+</Expandable>
+
+## Example Request
+
+<CodeGroup>
+
+```typescript TypeScript
+import { ConvexClient } from "convex/browser";
+import { api } from "./convex/_generated/api";
+
+const convex = new ConvexClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+
+// Create a new conversation
+const conversationId = await convex.mutation(
+  api.conversations.create,
+  {
+    projectId: "k57abc123def4567" as Id<"projects">,
+    title: "Implement user authentication"
+  }
+);
+
+console.log(`Created conversation: ${conversationId}`);
+```
+
+```javascript JavaScript
+const { ConvexClient } = require("convex/browser");
+const { api } = require("./convex/_generated/api");
+
+const convex = new ConvexClient(process.env.NEXT_PUBLIC_CONVEX_URL);
+
+// Create a new conversation
+const conversationId = await convex.mutation(
+  api.conversations.create,
+  {
+    projectId: "k57abc123def4567",
+    title: "Implement user authentication"
+  }
+);
+
+console.log(`Created conversation: ${conversationId}`);
+```
+
+```bash cURL
+curl -X POST https://your-app.convex.cloud/api/mutation \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "path": "conversations:create",
+    "args": {
+      "projectId": "k57abc123def4567",
+      "title": "Implement user authentication"
+    }
+  }'
+```
+
+</CodeGroup>
+
+## Error Responses
+
+<ResponseField name="error" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+### Common Errors
+
+- **"Project not found"** - The specified project ID does not exist
+- **"Unauthorized to access this project"** - The authenticated user does not own the project
+- **"Unauthorized"** - No valid authentication token provided
+
+## Usage Notes
+
+- Each project can have multiple conversations
+- Conversations are ordered by `updatedAt` timestamp (most recent first)
+- The title can be updated later by sending a message - the AI will auto-generate a contextual title if the default is used
+- Conversations persist until explicitly deleted
+- All messages within a conversation share the same project context
+
+## Related Endpoints
+
+- [List Conversations](/api/conversations/list) - Retrieve all conversations for a project
+- [Send Message](/api/conversations/messages) - Send a message within a conversation

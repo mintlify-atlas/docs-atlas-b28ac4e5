@@ -1,0 +1,219 @@
+---
+title: "List Files"
+api: "GET /api/files"
+description: "Retrieve all files and folders in a project"
+---
+
+## Overview
+
+The `getFiles` query retrieves all files and folders belonging to a specific project. Returns a hierarchical structure where items can be at the root level (`parentId: null`) or nested within folders. This endpoint is essential for displaying file trees, navigating project structure, and understanding folder hierarchies.
+
+## Authentication
+
+Requires authentication via Convex auth. The authenticated user must be the project owner to access files.
+
+## Request
+
+<ParamField query="projectId" type="string" required>
+  The unique identifier of the project. Must be a valid Convex ID for the `projects` table.
+</ParamField>
+
+## Response
+
+Returns an array of file and folder objects sorted alphabetically with folders appearing before files.
+
+<ResponseField name="files" type="array">
+  Array of file and folder objects in the project
+  
+  <Expandable title="File Object Properties">
+    <ResponseField name="_id" type="string">
+      Unique identifier for the file or folder
+    </ResponseField>
+    
+    <ResponseField name="projectId" type="string">
+      ID of the parent project
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Name of the file or folder (includes extension for files)
+    </ResponseField>
+    
+    <ResponseField name="type" type="enum">
+      Either `"file"` or `"folder"`
+    </ResponseField>
+    
+    <ResponseField name="parentId" type="string | null">
+      ID of the parent folder. `null` indicates root-level items. Items with the same `parentId` are in the same folder.
+    </ResponseField>
+    
+    <ResponseField name="content" type="string | undefined">
+      File content (only present for files, not folders)
+    </ResponseField>
+    
+    <ResponseField name="storageId" type="string | undefined">
+      Convex storage ID if file is stored in blob storage
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="number">
+      Unix timestamp (milliseconds) of last modification
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+
+```typescript TypeScript
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
+
+function FileList({ projectId }: { projectId: Id<"projects"> }) {
+  const files = useQuery(api.files.getFiles, { projectId });
+  
+  if (!files) return <div>Loading...</div>;
+  
+  // Separate root-level items
+  const rootItems = files.filter(f => f.parentId === null);
+  
+  return (
+    <ul>
+      {rootItems.map(item => (
+        <li key={item._id}>
+          {item.type === "folder" ? "📁" : "📄"} {item.name}
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+```javascript JavaScript
+const files = await convex.query(api.files.getFiles, {
+  projectId: "k17abc123def4567"
+});
+
+// Build folder structure
+const folderMap = new Map();
+files.forEach(file => {
+  if (!folderMap.has(file.parentId)) {
+    folderMap.set(file.parentId, []);
+  }
+  folderMap.get(file.parentId).push(file);
+});
+
+// Get root-level items
+const rootItems = folderMap.get(null) || [];
+console.log(`Found ${rootItems.length} root-level items`);
+```
+
+```python Python
+# Using Convex Python client
+files = client.query("files:getFiles", {
+    "projectId": "k17abc123def4567"
+})
+
+# Filter folders
+folders = [f for f in files if f["type"] == "folder"]
+file_count = len([f for f in files if f["type"] == "file"])
+
+print(f"Project has {len(folders)} folders and {file_count} files")
+```
+
+</CodeGroup>
+
+## Folder Structure
+
+Understanding the hierarchical structure:
+
+- **Root Level**: Items with `parentId: null`
+- **Nested Items**: Items with `parentId` matching another folder's `_id`
+- **Siblings**: Items sharing the same `parentId` value
+
+### Example Structure
+
+```json
+[
+  {
+    "_id": "k17folder1",
+    "name": "src",
+    "type": "folder",
+    "parentId": null,
+    "projectId": "k17project1",
+    "updatedAt": 1709856000000
+  },
+  {
+    "_id": "k17folder2",
+    "name": "components",
+    "type": "folder",
+    "parentId": "k17folder1",
+    "projectId": "k17project1",
+    "updatedAt": 1709856000000
+  },
+  {
+    "_id": "k17file1",
+    "name": "Button.tsx",
+    "type": "file",
+    "parentId": "k17folder2",
+    "content": "export const Button = () => {...}",
+    "projectId": "k17project1",
+    "updatedAt": 1709856000000
+  }
+]
+```
+
+This represents: `src/components/Button.tsx`
+
+## Error Handling
+
+<ResponseField name="error" type="string">
+  Error message if the operation fails
+</ResponseField>
+
+### Common Errors
+
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| `"Unauthorized to access this project"` | User is not the project owner | Verify authentication and project ownership |
+| `"Project not found"` | Invalid `projectId` | Check that the project ID is correct and exists |
+| Empty array `[]` | No files in project or project doesn't exist | This is a valid response for empty projects |
+
+## Related Endpoints
+
+- [Read Files](/api/files/read) - Get file contents
+- [Create Files](/api/files/create) - Add new files
+- [Get Folder Contents](/api/files/list#folder-contents) - List specific folder
+
+## Folder Contents Variant
+
+For listing contents of a specific folder, use `getFolderContents`:
+
+<ParamField query="projectId" type="string" required>
+  Project identifier
+</ParamField>
+
+<ParamField query="parentId" type="string" optional>
+  Folder ID to list contents. Omit or pass `undefined` for root level.
+</ParamField>
+
+### Example
+
+```typescript
+const rootContents = await convex.query(api.files.getFolderContents, {
+  projectId,
+  parentId: undefined // Root level
+});
+
+const folderContents = await convex.query(api.files.getFolderContents, {
+  projectId,
+  parentId: "k17folder1" // Specific folder
+});
+```
+
+## Performance Notes
+
+- Results are indexed by `projectId` for fast retrieval
+- Sorting (folders first, alphabetically) happens in-memory
+- For large projects (1000+ files), consider using `getFolderContents` for pagination
+- The query uses Convex's `by_project` index for optimal performance

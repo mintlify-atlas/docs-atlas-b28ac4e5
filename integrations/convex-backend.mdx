@@ -1,0 +1,647 @@
+---
+title: Convex Backend
+description: Real-time database, type-safe queries, and serverless functions with Convex
+icon: database
+---
+
+## Overview
+
+**Convex** powers the entire backend of Rushed AI, providing a real-time database, type-safe queries and mutations, and serverless function execution. Convex eliminates the need for traditional REST APIs by offering reactive data subscriptions and automatic schema validation.
+
+## Why Convex?
+
+<CardGroup cols={2}>
+  <Card title="Real-Time by Default" icon="bolt">
+    All queries are reactive subscriptions. When data changes, components automatically re-render.
+  </Card>
+  
+  <Card title="Type-Safe End-to-End" icon="shield">
+    Full TypeScript support from database schema to client queries with automatic code generation.
+  </Card>
+  
+  <Card title="Serverless Functions" icon="cloud">
+    Write backend logic as functions that scale automatically without infrastructure management.
+  </Card>
+  
+  <Card title="Integrated Authentication" icon="key">
+    Built-in auth integration with Clerk for seamless user identity management.
+  </Card>
+</CardGroup>
+
+## Setup
+
+<Steps>
+  <Step title="Install Convex">
+    ```bash
+    npm install convex
+    ```
+  </Step>
+  
+  <Step title="Initialize Convex">
+    ```bash
+    npx convex dev
+    ```
+    
+    This creates a Convex deployment and generates environment variables.
+  </Step>
+  
+  <Step title="Configure Environment Variables">
+    Add the generated variables to `.env.local`:
+    
+    ```bash
+    # Convex Deployment
+    CONVEX_DEPLOYMENT=dev:your-deployment
+    NEXT_PUBLIC_CONVEX_URL=https://your-deployment.convex.cloud
+    NEXT_PUBLIC_CONVEX_SITE_URL=http://localhost:3000
+    
+    # Convex Deploy Key (for CI/CD)
+    CONVEX_DEPLOY_KEY=
+    
+    # Internal API Key (for server-side Convex calls)
+    RUSHED_CONVEX_INTERNAL_KEY=<generated-base64-key>
+    ```
+  </Step>
+  
+  <Step title="Set Up Client Providers">
+    Configure Convex with Clerk authentication in `src/components/providers.tsx`:
+    
+    ```typescript
+    import { ConvexReactClient } from "convex/react";
+    import { ConvexProviderWithClerk } from "convex/react-clerk";
+    import { ClerkProvider, useAuth } from "@clerk/nextjs";
+
+    const convex = new ConvexReactClient(
+      process.env.NEXT_PUBLIC_CONVEX_URL!
+    );
+
+    export const Providers = ({ children }) => (
+      <ClerkProvider>
+        <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+          {children}
+        </ConvexProviderWithClerk>
+      </ClerkProvider>
+    );
+    ```
+  </Step>
+</Steps>
+
+## Database Schema
+
+Convex uses a schema-first approach defined in `convex/schema.ts`:
+
+```typescript
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export default defineSchema({
+  projects: defineTable({
+    name: v.string(),
+    ownerId: v.string(),
+    updatedAt: v.number(),
+    importStatus: v.optional(
+      v.union(
+        v.literal("importing"),
+        v.literal("completed"),
+        v.literal("failed"),
+      ),
+    ),
+    exportStatus: v.optional(
+      v.union(
+        v.literal("exporting"),
+        v.literal("completed"),
+        v.literal("failed"),
+        v.literal("cancelled"),
+      ),
+    ),
+    exportRepoUrl: v.optional(v.string()),
+    settings: v.optional(
+      v.object({
+        installCommand: v.optional(v.string()),
+        devCommand: v.optional(v.string()),
+      })
+    ),
+  }).index("by_owner", ["ownerId"]),
+
+  files: defineTable({
+    projectId: v.id("projects"),
+    parentId: v.optional(v.id("files")),
+    name: v.string(),
+    type: v.union(v.literal("file"), v.literal("folder")),
+    content: v.optional(v.string()),
+    storageId: v.optional(v.id("_storage")),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_parent", ["parentId"])
+    .index("by_project_parent", ["projectId", "parentId"]),
+
+  conversations: defineTable({
+    projectId: v.id("projects"),
+    title: v.string(),
+    updatedAt: v.number(),
+  }).index("by_project", ["projectId"]),
+
+  messages: defineTable({
+    conversationId: v.id("conversations"),
+    projectId: v.id("projects"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    status: v.optional(
+      v.union(
+        v.literal("processing"),
+        v.literal("completed"),
+        v.literal("cancelled")
+      )
+    ),
+  })
+    .index("by_conversation", ["conversationId"])
+    .index("by_project_status", ["projectId", "status"]),
+    
+  // ... subscriptions, customers, transactions, creditPacks tables
+});
+```
+
+### Key Schema Features
+
+- **Type Safety**: Every field has a defined type using Convex's `v` validators
+- **Indexes**: Optimize queries with indexed fields (e.g., `by_owner`, `by_project`)
+- **Relationships**: Reference other tables with `v.id("tableName")`
+- **Optional Fields**: Use `v.optional()` for nullable fields
+- **Nested Objects**: Define structured data with `v.object()`
+
+## Queries
+
+Queries are read-only operations that subscribe to data changes.
+
+### Defining Queries
+
+In `convex/projects.ts`:
+
+```typescript
+import { query } from "./_generated/server";
+import { v } from "convex/values";
+import { verifyAuth } from "./auth";
+
+export const get = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await verifyAuth(ctx);
+
+    return await ctx.db
+      .query("projects")
+      .withIndex("by_owner", (q) => q.eq("ownerId", identity.subject))
+      .order("desc")
+      .collect();
+  },
+});
+
+export const getById = query({
+  args: { id: v.id("projects") },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+    
+    const project = await ctx.db.get(args.id);
+    
+    if (!project) {
+      return null;
+    }
+    
+    if (project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized access to this project");
+    }
+    
+    return project;
+  },
+});
+```
+
+### Using Queries in React
+
+Convex provides React hooks for queries:
+
+```typescript
+"use client";
+
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+
+export function ProjectList() {
+  const projects = useQuery(api.projects.get);
+
+  if (!projects) {
+    return <div>Loading...</div>;
+  }
+
+  return (
+    <ul>
+      {projects.map((project) => (
+        <li key={project._id}>{project.name}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+<Info>
+  Queries automatically re-run when dependent data changes. If another user creates a project, your component will instantly show the update.
+</Info>
+
+### Querying with Indexes
+
+Indexes optimize query performance:
+
+```typescript
+// Query projects by owner using index
+const projects = await ctx.db
+  .query("projects")
+  .withIndex("by_owner", (q) => q.eq("ownerId", userId))
+  .collect();
+
+// Query files by project and parent folder
+const files = await ctx.db
+  .query("files")
+  .withIndex("by_project_parent", (q) =>
+    q.eq("projectId", projectId).eq("parentId", parentId)
+  )
+  .collect();
+```
+
+## Mutations
+
+Mutations modify database state.
+
+### Defining Mutations
+
+In `convex/projects.ts`:
+
+```typescript
+import { mutation } from "./_generated/server";
+import { v } from "convex/values";
+import { verifyAuth } from "./auth";
+
+export const create = mutation({
+  args: { name: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+
+    const projectId = await ctx.db.insert("projects", {
+      name: args.name,
+      ownerId: identity.subject,
+      updatedAt: Date.now(),
+    });
+
+    return projectId;
+  },
+});
+
+export const rename = mutation({
+  args: {
+    id: v.id("projects"),
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+    
+    const project = await ctx.db.get(args.id);
+    
+    if (!project) {
+      throw new Error("Project not found");
+    }
+    
+    if (project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized access to this project");
+    }
+    
+    await ctx.db.patch(args.id, {
+      name: args.name,
+      updatedAt: Date.now(),
+    });
+  },
+});
+```
+
+### Using Mutations in React
+
+```typescript
+"use client";
+
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+
+export function CreateProjectButton() {
+  const createProject = useMutation(api.projects.create);
+
+  const handleCreate = async () => {
+    try {
+      const projectId = await createProject({ name: "New Project" });
+      console.log("Created project:", projectId);
+    } catch (error) {
+      console.error("Failed to create project:", error);
+    }
+  };
+
+  return <button onClick={handleCreate}>Create Project</button>;
+}
+```
+
+## Actions
+
+Actions are serverless functions that can perform non-deterministic operations (API calls, file operations, etc.).
+
+### Defining Actions
+
+```typescript
+import { action } from "./_generated/server";
+import { v } from "convex/values";
+import { api } from "./_generated/api";
+
+export const checkCredits = action({
+  args: {
+    internalKey: v.string(),
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Verify internal key
+    if (args.internalKey !== process.env.RUSHED_CONVEX_INTERNAL_KEY) {
+      throw new Error("Invalid internal key");
+    }
+
+    // Query subscription
+    const subscription = await ctx.runQuery(
+      api.subscriptions.getByUserId,
+      { userId: args.userId }
+    );
+
+    if (!subscription) {
+      return {
+        allowed: false,
+        error: "no_subscription",
+      };
+    }
+
+    if (subscription.plan === "starter") {
+      return {
+        allowed: false,
+        error: "upgrade_required",
+      };
+    }
+
+    return { allowed: true };
+  },
+});
+```
+
+### Using Actions
+
+Actions are called from server-side code using the HTTP client:
+
+```typescript
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "@/convex/_generated/api";
+
+const convex = new ConvexHttpClient(
+  process.env.NEXT_PUBLIC_CONVEX_URL!
+);
+
+const result = await convex.action(api.credits.checkCredits, {
+  internalKey: process.env.RUSHED_CONVEX_INTERNAL_KEY!,
+  userId: "user_123",
+});
+```
+
+See `src/lib/convex-client.ts` for the HTTP client setup.
+
+## File Storage
+
+Convex includes built-in file storage for binary files.
+
+### Storing Files
+
+```typescript
+import { mutation } from "./_generated/server";
+import { v } from "convex/values";
+
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const saveFile = mutation({
+  args: {
+    projectId: v.id("projects"),
+    name: v.string(),
+    storageId: v.id("_storage"),
+    parentId: v.optional(v.id("files")),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("files", {
+      projectId: args.projectId,
+      name: args.name,
+      type: "file",
+      storageId: args.storageId,
+      parentId: args.parentId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+```
+
+### Uploading from Client
+
+```typescript
+const generateUploadUrl = useMutation(api.files.generateUploadUrl);
+const saveFile = useMutation(api.files.saveFile);
+
+const handleUpload = async (file: File) => {
+  // Get upload URL
+  const uploadUrl = await generateUploadUrl();
+
+  // Upload file
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: { "Content-Type": file.type },
+    body: file,
+  });
+
+  const { storageId } = await response.json();
+
+  // Save file record
+  await saveFile({
+    projectId,
+    name: file.name,
+    storageId,
+  });
+};
+```
+
+## Server-Side Convex Calls
+
+For API routes and serverless functions, use the HTTP client:
+
+### HTTP Client Setup
+
+In `src/lib/convex-client.ts`:
+
+```typescript
+import { ConvexHttpClient } from "convex/browser";
+
+export const convex = new ConvexHttpClient(
+  process.env.NEXT_PUBLIC_CONVEX_URL!
+);
+```
+
+### Calling Mutations from API Routes
+
+```typescript
+import { convex } from "@/lib/convex-client";
+import { api } from "@/convex/_generated/api";
+
+export async function POST(request: Request) {
+  const { userId } = await auth();
+
+  const projectId = await convex.mutation(api.projects.create, {
+    name: "New Project",
+    ownerId: userId,
+  });
+
+  return NextResponse.json({ projectId });
+}
+```
+
+### Internal Key Pattern
+
+For system-level operations, use an internal key to bypass user authentication:
+
+```typescript
+const internalKey = process.env.RUSHED_CONVEX_INTERNAL_KEY;
+
+const projectId = await convex.mutation(api.system.createProject, {
+  internalKey,
+  name: "Project",
+  ownerId: userId,
+});
+```
+
+The mutation verifies the key before proceeding:
+
+```typescript
+export const createProject = mutation({
+  args: {
+    internalKey: v.string(),
+    name: v.string(),
+    ownerId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (args.internalKey !== process.env.RUSHED_CONVEX_INTERNAL_KEY) {
+      throw new Error("Invalid internal key");
+    }
+
+    return await ctx.db.insert("projects", {
+      name: args.name,
+      ownerId: args.ownerId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+```
+
+<Note>
+  Generate the internal key with:
+  ```bash
+  node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+  ```
+</Note>
+
+## Advanced Patterns
+
+### Paginated Queries
+
+```typescript
+export const getPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+
+    return await ctx.db
+      .query("projects")
+      .withIndex("by_owner", (q) => q.eq("ownerId", identity.subject))
+      .order("desc")
+      .paginate(args.paginationOpts);
+  },
+});
+```
+
+### Transactional Operations
+
+Mutations are automatically transactional:
+
+```typescript
+export const deleteProject = mutation({
+  args: { id: v.id("projects") },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+    
+    // All operations succeed or all fail together
+    
+    // Delete all files
+    const files = await ctx.db
+      .query("files")
+      .withIndex("by_project", (q) => q.eq("projectId", args.id))
+      .collect();
+    
+    for (const file of files) {
+      await ctx.db.delete(file._id);
+    }
+    
+    // Delete all conversations
+    const conversations = await ctx.db
+      .query("conversations")
+      .withIndex("by_project", (q) => q.eq("projectId", args.id))
+      .collect();
+    
+    for (const conversation of conversations) {
+      await ctx.db.delete(conversation._id);
+    }
+    
+    // Delete project
+    await ctx.db.delete(args.id);
+  },
+});
+```
+
+See full implementation in `convex/projects.ts:125`.
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Always Verify Auth" icon="shield-check">
+    Start every query and mutation handler with `verifyAuth(ctx)` to ensure user authentication.
+  </Card>
+  
+  <Card title="Use Indexes Wisely" icon="magnifying-glass">
+    Create indexes for frequently queried fields to optimize performance.
+  </Card>
+  
+  <Card title="Keep Mutations Atomic" icon="atom">
+    Mutations are transactional. Group related changes in a single mutation.
+  </Card>
+  
+  <Card title="Use Actions for External APIs" icon="cloud">
+    Queries and mutations must be deterministic. Use actions for API calls, file I/O, etc.
+  </Card>
+</CardGroup>
+
+## Related Files
+
+- Schema Definition: `convex/schema.ts`
+- Projects Queries/Mutations: `convex/projects.ts`
+- Files Queries/Mutations: `convex/files.ts`
+- Conversations: `convex/conversations.ts`
+- Auth Helper: `convex/auth.ts`
+- Auth Config: `convex/auth.config.ts`
+- HTTP Client: `src/lib/convex-client.ts`
+- React Provider: `src/components/providers.tsx`

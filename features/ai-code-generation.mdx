@@ -1,0 +1,305 @@
+---
+title: AI Code Generation
+description: Claude Sonnet 4 powered AI assistant that generates, modifies, and understands your codebase
+icon: sparkles
+---
+
+## Overview
+
+Rushed AI leverages Anthropic's Claude Sonnet 4.6 model to provide intelligent code generation and project assistance. The AI agent can read your existing code, create new files, modify existing ones, and understand project context to deliver accurate results.
+
+<Note>
+The AI uses **Claude Sonnet 4.6** with 16,000 max output tokens for code generation and **Claude Haiku 4.5** for conversation titles to optimize performance and cost.
+</Note>
+
+## How It Works
+
+### Architecture
+
+The AI system is built on **Inngest Agent Kit** and processes messages through a multi-step workflow:
+
+<Steps>
+  <Step title="Credit Check">
+    Before processing, the system verifies the user has sufficient credits and hasn't exceeded daily caps.
+  </Step>
+  
+  <Step title="Context Loading">
+    Retrieves the last 10 messages from the conversation to maintain context (up to 12,000 characters).
+  </Step>
+  
+  <Step title="AI Processing">
+    Sends the message to Claude Sonnet 4.6 with access to file system tools and project context.
+  </Step>
+  
+  <Step title="Tool Execution">
+    The AI can call tools to list, read, create, update, rename, and delete files in your project.
+  </Step>
+  
+  <Step title="Streaming Response">
+    Responses are streamed back in real-time with a 30-character threshold for UI updates.
+  </Step>
+</Steps>
+
+### Model Configuration
+
+```typescript
+const codingAgent = createAgent({
+  name: "rushed-ai",
+  description: "An expert AI coding assistant",
+  system: systemPrompt,
+  model: anthropic({
+    model: "claude-sonnet-4-6",
+    defaultParameters: { 
+      temperature: 0.3,
+      max_tokens: 16000 
+    }
+  }),
+  tools: [
+    listFilesTool,
+    readFilesTool,
+    updateFileTool,
+    createFilesTool,
+    createFolderTool,
+    renameFileTool,
+    deleteFilesTool,
+    scrapeUrlsTool,
+  ]
+});
+```
+
+## Available AI Tools
+
+The AI agent has access to eight specialized tools for project manipulation:
+
+<CardGroup cols={2}>
+  <Card title="listFiles" icon="list">
+    Returns the complete project file tree with IDs, names, types, and parent relationships.
+  </Card>
+  
+  <Card title="readFiles" icon="book-open">
+    Reads the content of one or more files by their IDs to understand existing code.
+  </Card>
+  
+  <Card title="createFiles" icon="file-plus">
+    Batch creates multiple files in the same folder. More efficient than creating files individually.
+  </Card>
+  
+  <Card title="updateFile" icon="pencil">
+    Modifies the content of an existing file by its ID.
+  </Card>
+  
+  <Card title="createFolder" icon="folder-plus">
+    Creates a new folder and returns its ID for use as a parent for new files.
+  </Card>
+  
+  <Card title="renameFile" icon="edit">
+    Renames a file or folder while checking for naming conflicts.
+  </Card>
+  
+  <Card title="deleteFiles" icon="trash">
+    Deletes multiple files or folders. Recursively removes folder contents.
+  </Card>
+  
+  <Card title="scrapeUrls" icon="globe">
+    Fetches and extracts content from URLs to incorporate external documentation or references.
+  </Card>
+</CardGroup>
+
+## System Prompt
+
+The AI operates with a structured system prompt that defines its behavior:
+
+<Accordion title="View System Prompt">
+```
+You are Rushed, an expert AI coding assistant. You help users by reading, 
+creating, updating, and organizing files in their projects.
+
+Workflow:
+1. Call listFiles to see the current project structure
+2. Call readFiles to understand existing code when relevant
+3. Execute ALL necessary changes:
+   - Create folders first to get their IDs
+   - Use createFiles to batch create multiple files
+4. After completing ALL actions, verify by calling listFiles again
+5. Provide a final summary of what you accomplished
+
+Rules:
+- Complete the ENTIRE task before responding
+- Do not stop halfway or ask if you should continue
+- Never narrate actions - just execute them silently
+```
+</Accordion>
+
+## Streaming & Real-time Updates
+
+Responses are streamed in real-time using a delta-based approach:
+
+```typescript
+streaming: {
+  publish: async (chunk: AgentMessageChunk) => {
+    if (chunk.event === "text.delta") {
+      const delta = chunk.data.delta ?? "";
+      if (delta) {
+        streamedContent += delta;
+        
+        // Update UI every 30 characters
+        if (streamedContent.length - lastWriteLength >= 30) {
+          lastWriteLength = streamedContent.length;
+          await convex.mutation(api.system.streamMessageContent, {
+            internalKey,
+            messageId,
+            content: streamedContent,
+          });
+        }
+      }
+    }
+  },
+}
+```
+
+<Tip>
+The 30-character threshold balances real-time feedback with database write efficiency.
+</Tip>
+
+## Multi-turn Conversations
+
+The AI maintains context across multiple turns:
+
+1. **Context Limit**: Last 10 messages (up to 12,000 characters)
+2. **Deduplication**: Filters out the current message and empty messages
+3. **Format**: Messages are formatted as `ROLE: content` pairs
+4. **Instruction**: System prompt includes explicit instructions not to repeat previous responses
+
+```typescript
+const contextMessages = recentMessages.filter(
+  (msg) => msg._id !== messageId && msg.content.trim() !== ""
+);
+
+if (contextMessages.length > 0) {
+  const historyText = contextMessages
+    .map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
+    .join("\n\n")
+    .slice(-12000);
+
+  systemPrompt += `\n\n## Previous Conversation (for context only):\n...${historyText}`;
+}
+```
+
+## Auto-generated Titles
+
+New conversations automatically get descriptive titles:
+
+- **Model**: Claude Haiku 4.5 (fast, cost-effective)
+- **Prompt**: "Generate a short, descriptive title (3-6 words)"
+- **Timing**: Generated after the first user message
+- **Parameters**: Temperature 0, max 50 tokens
+
+```typescript
+const titleAgent = createAgent({
+  name: "title-generator",
+  system: TITLE_GENERATOR_SYSTEM_PROMPT,
+  model: anthropic({
+    model: "claude-haiku-4-5-20251001",
+    defaultParameters: { temperature: 0, max_tokens: 50 }
+  })
+});
+```
+
+## Token Usage & Credits
+
+Every AI interaction tracks token usage for billing:
+
+```typescript
+lifecycle: {
+  onFinish: ({ result }: { result: any }) => {
+    if (result.raw) {
+      const rawData = JSON.parse(result.raw);
+      if (rawData.usage) {
+        inputTokens += rawData.usage.input_tokens ?? 0;
+        outputTokens += rawData.usage.output_tokens ?? 0;
+      }
+    }
+    return result;
+  }
+}
+```
+
+After processing, credits are deducted based on:
+- Model used (Sonnet 4.6 or Haiku 4.5)
+- Input tokens consumed
+- Output tokens generated
+- Description of the operation
+
+<Note>
+If no token usage data is available, the system estimates tokens based on character count (4 characters ≈ 1 token).
+</Note>
+
+## Error Handling
+
+The system includes robust error handling:
+
+<CardGroup cols={2}>
+  <Card title="Credit Failures" icon="credit-card">
+    If credits are insufficient or daily cap is exceeded, processing stops immediately with a user-friendly error message.
+  </Card>
+  
+  <Card title="Processing Errors" icon="triangle-exclamation">
+    On failure, the `onFailure` handler updates the message with: "I encountered an error while processing your request."
+  </Card>
+  
+  <Card title="Cancellation" icon="ban">
+    Users can cancel in-flight AI requests by sending a `message/cancel` event matching the message ID.
+  </Card>
+  
+  <Card title="Conversation Not Found" icon="search">
+    Non-retriable error thrown if the conversation ID doesn't exist in the database.
+  </Card>
+</CardGroup>
+
+## Agent Network
+
+The AI uses Inngest's network architecture for iterative execution:
+
+```typescript
+const network = createNetwork({
+  name: "rushed-ai-network",
+  agents: [codingAgent],
+  maxIter: 10,  // Maximum 10 iterations
+  router: ({ lastResult }) => {
+    const hasTextResponse = lastResult?.output.some(
+      (m) => m.type === "text" && m.role === "assistant"
+    );
+    const hasToolCalls = lastResult?.output.some(
+      (m) => m.type === "tool_call"
+    );
+    
+    // Continue if there are tool calls but no final text
+    if (hasTextResponse && !hasToolCalls) {
+      return undefined;  // Stop
+    }
+    return codingAgent;  // Continue
+  }
+});
+```
+
+<Tip>
+The router ensures the AI continues working until it produces a final text response without pending tool calls.
+</Tip>
+
+## Example: Creating a React App
+
+When you ask "Create a React app with TypeScript", the AI:
+
+1. Calls `listFiles` to see the current project structure
+2. Calls `createFolder` to create a `src` folder
+3. Calls `createFiles` to batch create:
+   - `package.json` with dependencies
+   - `tsconfig.json` with TypeScript config
+   - `vite.config.ts` for the build tool
+   - `index.html` as the entry point
+4. Calls `createFolder` to create `src/components`
+5. Calls `createFiles` to create React components
+6. Calls `listFiles` again to verify everything was created
+7. Returns a summary of what was built and next steps
+
+All of this happens automatically in a single request!

@@ -1,0 +1,521 @@
+---
+title: Managing Files
+description: Create, rename, delete, and organize files and folders in your Rushed AI projects
+---
+
+## Overview
+
+Rushed AI's file explorer provides a complete file management system with a tree-based interface. You can create files and folders, organize them hierarchically, rename items, and delete what you no longer need - all while the AI keeps track of your project structure.
+
+## File Explorer Layout
+
+The file explorer occupies the left sidebar of your workspace:
+
+- **Project Header** - Shows project name and action buttons
+- **File Tree** - Hierarchical view of all files and folders
+- **Action Buttons** - Quick access to create files and folders
+
+```typescript
+// Root-level folders and files are queried without a parent
+const rootFiles = useFolderContents({
+  projectId,
+  enabled: isOpen,
+});
+```
+
+<Note>
+  Files and folders are automatically sorted: folders first (alphabetically), then files (alphabetically).
+</Note>
+
+## Creating Files
+
+Create new files at the root level or inside folders.
+
+<Steps>
+  <Step title="Click the New File Button">
+    Click the file icon (📄+) in the project header or right-click a folder and select "New File".
+  </Step>
+
+  <Step title="Enter the Filename">
+    A text input appears in the tree. Type your filename including the extension:
+    ```text
+    Button.tsx
+    utils.ts
+    styles.css
+    README.md
+    ```
+    
+    <Tip>
+      Include the file extension so Rushed AI can apply the correct syntax highlighting and language features.
+    </Tip>
+  </Step>
+
+  <Step title="Submit or Cancel">
+    - Press **Enter** to create the file
+    - Press **Escape** to cancel
+    - Click outside to cancel
+  </Step>
+
+  <Step title="File Created">
+    The new file appears in the tree and opens automatically in the editor with empty content.
+  </Step>
+</Steps>
+
+### Creating Nested Files
+
+To create a file inside a folder:
+
+1. Right-click the folder (or click its context menu)
+2. Select "New File"
+3. The input appears nested under that folder
+4. Enter the filename and press Enter
+
+```typescript
+// Files are created with a parent reference
+await createFile({
+  projectId,
+  name: "Button.tsx",
+  content: "",
+  parentId: folderId, // Links to parent folder
+});
+```
+
+<Warning>
+  You cannot create files with duplicate names in the same folder. Rushed AI will show an error: "File already exists".
+</Warning>
+
+## Creating Folders
+
+Organize your project structure with folders.
+
+<Steps>
+  <Step title="Click the New Folder Button">
+    Click the folder icon (📁+) in the project header or right-click a folder and select "New Folder".
+  </Step>
+
+  <Step title="Enter the Folder Name">
+    Type the folder name (no extension needed):
+    ```text
+    components
+    utils
+    hooks
+    __tests__
+    ```
+  </Step>
+
+  <Step title="Create">
+    Press Enter to create the folder. It appears in the tree with a folder icon and collapse/expand arrow.
+  </Step>
+
+  <Step title="Add Contents">
+    Click the arrow to expand the folder, then create files inside it.
+  </Step>
+</Steps>
+
+### Nested Folder Structure
+
+Create deep folder hierarchies:
+
+```text
+src/
+├── components/
+│   ├── ui/
+│   │   ├── Button.tsx
+│   │   └── Input.tsx
+│   └── layout/
+│       └── Header.tsx
+├── hooks/
+│   └── useAuth.ts
+└── utils/
+    └── helpers.ts
+```
+
+Each level is created by:
+1. Creating the parent folder
+2. Expanding it
+3. Creating child folders/files inside
+
+```typescript
+// Folders track their parent relationship
+await createFolder({
+  projectId,
+  name: "ui",
+  parentId: componentsFolder._id,
+});
+```
+
+## Renaming Files and Folders
+
+Change names while preserving content and relationships.
+
+<Steps>
+  <Step title="Open Context Menu">
+    Right-click the file or folder you want to rename.
+  </Step>
+
+  <Step title="Select Rename">
+    Click "Rename" from the context menu. The item becomes an editable input field.
+  </Step>
+
+  <Step title="Enter New Name">
+    Type the new name. The current name is pre-filled for editing:
+    ```text
+    Button.tsx → PrimaryButton.tsx
+    components → ui-components
+    ```
+  </Step>
+
+  <Step title="Submit">
+    Press Enter to save the new name. The item updates in the tree and all references remain intact.
+  </Step>
+</Steps>
+
+<Warning>
+  Renaming to a name that already exists in the same folder will fail with: "A file/folder with this name already exists in this location".
+</Warning>
+
+### What Happens When You Rename
+
+```typescript
+// Only the name changes - IDs and content stay the same
+await ctx.db.patch("files", args.id, {
+  name: args.newName,
+  updatedAt: Date.now(),
+});
+
+// Check for conflicts with siblings
+const siblings = await ctx.db
+  .query("files")
+  .withIndex("by_project_parent", (q) =>
+    q.eq("projectId", file.projectId)
+     .eq("parentId", file.parentId)
+  )
+  .collect();
+```
+
+<Tip>
+  Open tabs automatically reflect the new name. You don't need to re-open files after renaming.
+</Tip>
+
+## Deleting Files and Folders
+
+Remove files and folders you no longer need.
+
+<Steps>
+  <Step title="Open Context Menu">
+    Right-click the item you want to delete.
+  </Step>
+
+  <Step title="Select Delete">
+    Click "Delete" from the context menu.
+    
+    <Warning>
+      **Deletion is permanent.** There's no undo or recycle bin. Make sure you want to remove the item.
+    </Warning>
+  </Step>
+
+  <Step title="Confirmation">
+    The item is immediately removed from the tree and database.
+  </Step>
+</Steps>
+
+### Deleting Folders
+
+When you delete a folder:
+
+1. **All contents are deleted** - Files and subfolders inside are removed recursively
+2. **No confirmation** - The operation happens immediately
+3. **Open tabs close** - Any open files from that folder close automatically
+
+```typescript
+// Recursive deletion implementation
+const deleteRecursive = async (fileId: Id<"files">) => {
+  const item = await ctx.db.get("files", fileId);
+  
+  if (!item) return;
+  
+  // Delete all children first (for folders)
+  if (item.type === "folder") {
+    const children = await ctx.db
+      .query("files")
+      .withIndex("by_project_parent", (q) =>
+        q.eq("projectId", item.projectId)
+         .eq("parentId", fileId)
+      )
+      .collect();
+    
+    for (const child of children) {
+      await deleteRecursive(child._id);
+    }
+  }
+  
+  // Delete storage file if it exists
+  if (item.storageId) {
+    await ctx.storage.delete(item.storageId);
+  }
+  
+  // Delete the item itself
+  await ctx.db.delete("files", fileId);
+};
+```
+
+<Warning>
+  Be especially careful deleting folders. All nested contents are permanently removed with no way to recover them.
+</Warning>
+
+## Navigating the File Tree
+
+### Expanding and Collapsing Folders
+
+- **Click the arrow** (▶) next to a folder to expand/collapse it
+- **Click the folder name** to toggle expansion
+- **Click the collapse-all button** (📋) in the header to collapse all folders
+
+```typescript
+const [isOpen, setIsOpen] = useState(false);
+
+// Folders lazy-load their contents when expanded
+const folderContents = useFolderContents({
+  projectId,
+  parentId: item._id,
+  enabled: item.type === "folder" && isOpen,
+});
+```
+
+<Tip>
+  Folders don't load their contents until you expand them. This keeps your project performant even with hundreds of files.
+</Tip>
+
+### Breadcrumb Navigation
+
+When a file is open, breadcrumbs appear above the editor showing the full path:
+
+```text
+src > components > ui > Button.tsx
+```
+
+This helps you understand where the file lives in your project structure.
+
+```typescript
+// Breadcrumbs are built by traversing parent relationships
+const path: { _id: string; name: string }[] = [];
+let currentId: Id<"files"> | undefined = fileId;
+
+while (currentId) {
+  const file = await ctx.db.get("files", currentId);
+  if (!file) break;
+  
+  path.unshift({ _id: file._id, name: file.name });
+  currentId = file.parentId;
+}
+```
+
+## File Tree Organization
+
+### Automatic Sorting
+
+Files and folders are automatically sorted:
+
+1. **Folders first** - All folders appear before files
+2. **Alphabetical within type** - Folders sorted A-Z, then files sorted A-Z
+
+```typescript
+// Sorting implementation
+files.sort((a, b) => {
+  // Folders come before files
+  if (a.type === "folder" && b.type === "file") return -1;
+  if (a.type === "file" && b.type === "folder") return 1;
+  
+  // Within same type, sort alphabetically
+  return a.name.localeCompare(b.name);
+});
+```
+
+Result:
+```text
+📁 components
+📁 hooks
+📁 utils
+📄 App.tsx
+📄 index.ts
+📄 README.md
+```
+
+### Visual Hierarchy
+
+The tree uses indentation to show nesting levels:
+
+- **Level 0** - Root items (no indentation)
+- **Level 1** - One level of indentation
+- **Level 2** - Two levels of indentation
+- And so on...
+
+```typescript
+// Padding increases with nesting level
+const getItemPadding = (level: number, hasIcon: boolean) => {
+  const basePadding = 8;
+  const levelPadding = level * 16;
+  const iconSpace = hasIcon ? 0 : 20;
+  return `${basePadding + levelPadding + iconSpace}px`;
+};
+```
+
+## Working with the AI
+
+The AI understands your file structure and can:
+
+### Create Files Through Conversation
+
+Simply ask the AI:
+```text
+Create a new Button component in src/components/ui
+```
+
+The AI will:
+1. Create the `src/components/ui` folder structure if it doesn't exist
+2. Create `Button.tsx` with component code
+3. Update the file tree automatically
+
+### Reference Files with @
+
+Use `@` to tag files in conversations:
+```text
+@src/components/Button.tsx Make this button support different sizes
+```
+
+The file picker shows the full tree structure, making it easy to find and reference files.
+
+### Organize Through AI
+
+Ask the AI to help organize:
+```text
+Move all utility functions to a utils folder
+Organize components into folders by feature
+Create a proper folder structure for this project
+```
+
+## Best Practices
+
+<Card title="Use Descriptive Names" icon="tag">
+  Name files and folders clearly:
+  - ✅ `UserProfileCard.tsx`
+  - ❌ `component2.tsx`
+</Card>
+
+<Card title="Follow Conventions" icon="book">
+  Use common naming patterns:
+  - React components: `PascalCase.tsx`
+  - Utilities: `camelCase.ts`
+  - Constants: `UPPER_SNAKE_CASE.ts`
+  - Styles: `kebab-case.css`
+</Card>
+
+<Card title="Organize by Feature" icon="folder">
+  Group related files together:
+  ```text
+  features/
+  ├── auth/
+  │   ├── Login.tsx
+  │   ├── useAuth.ts
+  │   └── auth.css
+  └── dashboard/
+      ├── Dashboard.tsx
+      └── DashboardCard.tsx
+  ```
+</Card>
+
+<Card title="Keep It Shallow" icon="layer">
+  Avoid deeply nested structures:
+  - ✅ 3-4 levels deep
+  - ❌ 8+ levels deep
+</Card>
+
+## Common Patterns
+
+### Standard React Project Structure
+
+```text
+src/
+├── components/
+│   ├── ui/
+│   └── layout/
+├── hooks/
+├── utils/
+├── pages/
+├── styles/
+├── App.tsx
+└── index.tsx
+```
+
+### Feature-Based Structure
+
+```text
+src/
+├── features/
+│   ├── auth/
+│   ├── dashboard/
+│   └── settings/
+├── shared/
+│   ├── components/
+│   ├── hooks/
+│   └── utils/
+└── App.tsx
+```
+
+## Troubleshooting
+
+### "File already exists" Error
+
+This means a file or folder with that name already exists in the same location.
+
+**Solution:**
+1. Use a different name
+2. Delete or rename the existing file
+3. Create in a different folder
+
+### File Won't Delete
+
+If deletion fails:
+1. Check if the file is currently open (close it first)
+2. Refresh the page
+3. Try again
+
+### Changes Not Appearing
+
+If file operations don't seem to work:
+1. Check your internet connection
+2. Refresh the page to reload the tree
+3. Check browser console for errors
+
+### Can't Find a File
+
+If you can't locate a file:
+1. Expand all folders using breadcrumbs
+2. Use `⌘/Ctrl + K` to search for files
+3. Ask the AI where a file is located
+
+## Keyboard Shortcuts
+
+| Action | Shortcut |
+|--------|----------|
+| New file | Click `+📄` button |
+| New folder | Click `+📁` button |
+| Rename | Right-click → Rename |
+| Delete | Right-click → Delete |
+| Open file | Click filename |
+| Pin tab | Double-click filename |
+| Collapse all | Click `📋` button |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Editing Code" icon="code" href="/guides/editing-code">
+    Learn to edit your files in the code editor
+  </Card>
+  <Card title="Working with AI" icon="robot" href="/guides/working-with-ai">
+    Use AI to generate and organize files
+  </Card>
+  <Card title="Exporting Projects" icon="github" href="/guides/exporting-projects">
+    Export your organized project to GitHub
+  </Card>
+</CardGroup>

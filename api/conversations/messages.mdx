@@ -1,0 +1,425 @@
+---
+title: "Conversation Messages"
+api: "POST /api/messages"
+description: "Send a message to the AI assistant and retrieve conversation message history"
+---
+
+## Overview
+
+The messages API provides two core capabilities:
+
+1. **Send messages** to the AI coding assistant and receive intelligent responses
+2. **Retrieve message history** from a conversation to display chat context
+
+When you send a message, the AI assistant processes it asynchronously using Claude Sonnet 4.6, with access to tools for reading, writing, and modifying files in your project.
+
+## Send Message
+
+### Endpoint
+
+```
+POST /api/messages
+```
+
+### Authentication
+
+Requires Clerk authentication. The user must own the project associated with the conversation.
+
+### Request Body
+
+<ParamField body="conversationId" type="string" required>
+  The ID of the conversation to send the message to. Must be a valid Convex ID.
+</ParamField>
+
+<ParamField body="message" type="string" required>
+  The message content to send to the AI assistant. Can include natural language instructions, questions, or requests for code changes.
+</ParamField>
+
+<ParamField body="source" type="string" default="conversation_sidebar">
+  Optional source identifier for analytics tracking. Currently supports `"conversation_sidebar"`.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates whether the message was successfully queued for processing
+</ResponseField>
+
+<ResponseField name="eventId" type="string">
+  The Inngest event ID for tracking the message processing workflow
+</ResponseField>
+
+<ResponseField name="messageId" type="string">
+  The ID of the assistant message that will contain the AI response. Use this to track the response status.
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+
+```typescript TypeScript
+const response = await fetch("/api/messages", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    conversationId: "k17xyz789abc1234",
+    message: "Add a login form component with email and password fields. Style it with Tailwind CSS.",
+    source: "conversation_sidebar"
+  })
+});
+
+const data = await response.json();
+console.log(`Message queued: ${data.messageId}`);
+```
+
+```javascript JavaScript
+fetch("/api/messages", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    conversationId: "k17xyz789abc1234",
+    message: "Add a login form component with email and password fields. Style it with Tailwind CSS.",
+    source: "conversation_sidebar"
+  })
+})
+  .then(res => res.json())
+  .then(data => console.log(`Message queued: ${data.messageId}`));
+```
+
+```bash cURL
+curl -X POST https://your-app.com/api/messages \
+  -H "Content-Type: application/json" \
+  -H "Cookie: __session=YOUR_CLERK_SESSION" \
+  -d '{
+    "conversationId": "k17xyz789abc1234",
+    "message": "Add a login form component with email and password fields. Style it with Tailwind CSS.",
+    "source": "conversation_sidebar"
+  }'
+```
+
+</CodeGroup>
+
+### Error Responses
+
+<ResponseField name="error" type="string">
+  Human-readable error message
+</ResponseField>
+
+<ResponseField name="code" type="string">
+  Machine-readable error code for programmatic handling
+</ResponseField>
+
+#### Common Errors
+
+| Status | Error Code | Description |
+|--------|-----------|-------------|
+| 401 | - | User not authenticated |
+| 403 | `insufficient_credits` | User has run out of credits |
+| 403 | `daily_cap_exceeded` | Daily credit limit reached |
+| 403 | `subscription_inactive` | User's subscription is not active |
+| 404 | - | Conversation not found |
+| 400 | - | Invalid request body (missing required fields) |
+| 500 | - | Internal server error (internal key not configured) |
+
+### Example Error Response
+
+```json
+{
+  "error": "You've reached your daily credit limit. Your limit will reset tomorrow.",
+  "code": "daily_cap_exceeded"
+}
+```
+
+## Message Processing Flow
+
+When you send a message, the following happens:
+
+1. **Credit Check** - System validates user has sufficient credits and hasn't exceeded daily limits
+2. **Cancel Previous** - Any in-progress messages for the project are cancelled
+3. **Create Messages** - Two messages are created:
+   - User message with your content
+   - Assistant message with status `"processing"`
+4. **Queue Processing** - An Inngest event `message/sent` is triggered
+5. **AI Processing** - The message is processed by Claude Sonnet 4.6 with access to file manipulation tools
+6. **Streaming Response** - The assistant's response streams in real-time as it's generated
+7. **Credit Deduction** - Credits are deducted based on token usage
+8. **Complete** - Assistant message status changes to `"completed"`
+
+### AI Capabilities
+
+The AI assistant has access to the following tools:
+
+- **Read Files** - Read file contents from the project
+- **List Files** - Browse project file structure
+- **Update Files** - Modify existing files
+- **Create Files** - Create new files and folders
+- **Delete Files** - Remove files from the project
+- **Rename Files** - Rename or move files
+- **Scrape URLs** - Fetch content from external URLs for reference
+
+### Title Auto-Generation
+
+If the conversation title is "New Conversation" (the default), the AI automatically generates a contextual title based on the first message using Claude Haiku 4.5.
+
+## Get Messages
+
+### Endpoint
+
+```
+convex.query(api.conversations.getMessages, { conversationId })
+```
+
+### Query Parameters
+
+<ParamField query="conversationId" type="string" required>
+  The ID of the conversation to retrieve messages from
+</ParamField>
+
+### Response
+
+<ResponseField name="messages" type="array">
+  Array of message objects in ascending order (oldest first)
+  
+  <Expandable title="Message Object">
+    <ResponseField name="_id" type="string">
+      Unique message identifier
+    </ResponseField>
+    
+    <ResponseField name="conversationId" type="string">
+      Reference to the parent conversation
+    </ResponseField>
+    
+    <ResponseField name="projectId" type="string">
+      Reference to the project (for efficient querying)
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      Message role: either `"user"` or `"assistant"`
+    </ResponseField>
+    
+    <ResponseField name="content" type="string">
+      The message content. For assistant messages with status `"processing"`, this may be empty or contain partial streaming content.
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Processing status for assistant messages: `"processing"`, `"completed"`, or `"cancelled"`. User messages don't have a status.
+    </ResponseField>
+    
+    <ResponseField name="_creationTime" type="number">
+      Unix timestamp in milliseconds when the message was created
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+
+```typescript TypeScript
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
+
+function ConversationView({ conversationId }: { conversationId: Id<"conversations"> }) {
+  const messages = useQuery(api.conversations.getMessages, { conversationId });
+  
+  if (!messages) return <div>Loading...</div>;
+  
+  return (
+    <div className="messages">
+      {messages.map((msg) => (
+        <div key={msg._id} className={`message message-${msg.role}`}>
+          <div className="message-role">{msg.role}</div>
+          <div className="message-content">{msg.content}</div>
+          {msg.status && (
+            <div className="message-status">{msg.status}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+```javascript JavaScript
+const { useQuery } = require("convex/react");
+const { api } = require("@/convex/_generated/api");
+
+function ConversationView({ conversationId }) {
+  const messages = useQuery(api.conversations.getMessages, { conversationId });
+  
+  if (!messages) return <div>Loading...</div>;
+  
+  return (
+    <div className="messages">
+      {messages.map((msg) => (
+        <div key={msg._id} className={`message message-${msg.role}`}>
+          <div className="message-role">{msg.role}</div>
+          <div className="message-content">{msg.content}</div>
+          {msg.status && (
+            <div className="message-status">{msg.status}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+</CodeGroup>
+
+### Example Response
+
+```json
+[
+  {
+    "_id": "k27abc123def4567",
+    "conversationId": "k17xyz789abc1234",
+    "projectId": "k57abc123def4567",
+    "role": "user",
+    "content": "Add a login form component with email and password fields",
+    "_creationTime": 1709856234567
+  },
+  {
+    "_id": "k27def456ghi7890",
+    "conversationId": "k17xyz789abc1234",
+    "projectId": "k57abc123def4567",
+    "role": "assistant",
+    "content": "I'll create a login form component for you. Let me create a new file...",
+    "status": "completed",
+    "_creationTime": 1709856235890
+  },
+  {
+    "_id": "k27ghi789jkl0123",
+    "conversationId": "k17xyz789abc1234",
+    "projectId": "k57abc123def4567",
+    "role": "user",
+    "content": "Make the form responsive on mobile",
+    "_creationTime": 1709856345678
+  },
+  {
+    "_id": "k27jkl012mno3456",
+    "conversationId": "k17xyz789abc1234",
+    "projectId": "k57abc123def4567",
+    "role": "assistant",
+    "content": "",
+    "status": "processing",
+    "_creationTime": 1709856346123
+  }
+]
+```
+
+## Message Schema
+
+Messages are stored in the `messages` table with the following schema:
+
+<Expandable title="Messages Table Schema">
+  ```typescript
+  messages: defineTable({
+    conversationId: v.id("conversations"),
+    projectId: v.id("projects"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    status: v.optional(
+      v.union(
+        v.literal("processing"),
+        v.literal("completed"),
+        v.literal("cancelled")
+      )
+    ),
+  })
+    .index("by_conversation", ["conversationId"])
+    .index("by_project_status", ["projectId", "status"])
+  ```
+</Expandable>
+
+### Indexes
+
+- **`by_conversation`** - Efficiently query all messages in a conversation
+- **`by_project_status`** - Find processing messages across a project (for cancellation)
+
+## Real-time Updates
+
+Convex queries are reactive. When you query messages using `useQuery`, your UI automatically updates when:
+
+- New messages are added
+- Assistant messages stream in content updates
+- Message status changes from `processing` to `completed`
+
+This enables real-time chat experiences without manual polling.
+
+## Credit Usage
+
+Each message interaction consumes credits based on:
+
+- **Model**: Claude Sonnet 4.6 for main responses, Claude Haiku 4.5 for title generation
+- **Input tokens**: System prompt + conversation history + user message
+- **Output tokens**: AI response length
+
+Credits are automatically deducted after the AI completes its response. If the user runs out of credits mid-conversation, the message will fail with an appropriate error.
+
+## Cancellation
+
+When a new message is sent while another is processing, the system automatically:
+
+1. Sends a `message/cancel` event to Inngest
+2. Updates the previous message status to `"cancelled"`
+3. Processes the new message
+
+This ensures only one message processes at a time per project.
+
+## Advanced Usage
+
+### Stream Message Updates
+
+```typescript
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { useEffect, useRef } from "react";
+
+function ChatMessages({ conversationId }) {
+  const messages = useQuery(api.conversations.getMessages, { conversationId });
+  const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // Auto-scroll as messages update
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+  
+  const lastMessage = messages?.[messages.length - 1];
+  const isProcessing = lastMessage?.status === "processing";
+  
+  return (
+    <div className="chat-container">
+      {messages?.map((msg) => (
+        <MessageBubble key={msg._id} message={msg} />
+      ))}
+      {isProcessing && <TypingIndicator />}
+      <div ref={scrollRef} />
+    </div>
+  );
+}
+```
+
+### Check Processing Status
+
+```typescript
+const messages = await convex.query(api.conversations.getMessages, {
+  conversationId
+});
+
+const processingMessages = messages.filter(
+  msg => msg.role === "assistant" && msg.status === "processing"
+);
+
+const isConversationActive = processingMessages.length > 0;
+```
+
+## Related Endpoints
+
+- [Create Conversation](/api/conversations/create) - Create a new conversation
+- [List Conversations](/api/conversations/list) - View all conversations for a project

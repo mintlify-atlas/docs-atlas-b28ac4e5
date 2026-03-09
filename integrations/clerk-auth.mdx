@@ -1,0 +1,378 @@
+---
+title: Clerk Authentication
+description: Secure user authentication and GitHub OAuth integration with Clerk
+icon: shield-halved
+---
+
+## Overview
+
+Rushed AI uses **Clerk** as its authentication provider, offering secure user authentication, session management, and OAuth integration with GitHub. Clerk handles all authentication flows including sign-up, sign-in, and OAuth connections.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="User Authentication" icon="user-check">
+    Secure sign-up and sign-in with email, social providers, and magic links.
+  </Card>
+  
+  <Card title="GitHub OAuth" icon="github">
+    Connect GitHub accounts to enable repository imports and exports.
+  </Card>
+  
+  <Card title="Session Management" icon="clock">
+    Automatic token refresh and secure session handling.
+  </Card>
+  
+  <Card title="User Identity" icon="id-card">
+    Synchronized user identity between Clerk, Convex, and your application.
+  </Card>
+</CardGroup>
+
+## Setup
+
+<Steps>
+  <Step title="Create Clerk Application">
+    Sign up at [clerk.com](https://clerk.com) and create a new application.
+  </Step>
+  
+  <Step title="Enable GitHub OAuth">
+    In the Clerk dashboard, navigate to **OAuth** settings and enable GitHub as a provider.
+  </Step>
+  
+  <Step title="Configure Environment Variables">
+    Add your Clerk credentials to `.env.local`:
+    
+    ```bash
+    # Clerk Authentication
+    CLERK_JWT_ISSUER_DOMAIN=your-app.clerk.accounts.dev
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+    CLERK_SECRET_KEY=sk_test_...
+    ```
+  </Step>
+  
+  <Step title="Configure Convex Authentication">
+    Update `convex/auth.config.ts` to use Clerk as the auth provider:
+    
+    ```typescript
+    import { AuthConfig } from "convex/server";
+
+    export default {
+      providers: [
+        {
+          domain: process.env.CLERK_JWT_ISSUER_DOMAIN!,
+          applicationID: "convex",
+        },
+      ],
+    } satisfies AuthConfig;
+    ```
+  </Step>
+</Steps>
+
+## Environment Variables
+
+Required Clerk environment variables:
+
+```bash
+# JWT Issuer Domain (found in Clerk Dashboard > API Keys)
+CLERK_JWT_ISSUER_DOMAIN=your-app.clerk.accounts.dev
+
+# Publishable Key (client-side)
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+
+# Secret Key (server-side)
+CLERK_SECRET_KEY=sk_test_...
+```
+
+<Info>
+  The `CLERK_JWT_ISSUER_DOMAIN` is used by Convex to verify authentication tokens. Find this in your Clerk Dashboard under **API Keys**.
+</Info>
+
+## Client-Side Integration
+
+Clerk is integrated on the client-side through React providers:
+
+### Provider Setup
+
+In `src/components/providers.tsx`:
+
+```typescript
+"use client";
+
+import { ConvexReactClient } from "convex/react";
+import { ClerkProvider, useAuth } from "@clerk/nextjs";
+import { ConvexProviderWithClerk } from "convex/react-clerk";
+
+const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+
+export const Providers = ({ children }: { children: React.ReactNode }) => {
+  return (
+    <ClerkProvider afterSignOutUrl="/">
+      <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+        {children}
+      </ConvexProviderWithClerk>
+    </ClerkProvider>
+  );
+};
+```
+
+### Root Layout
+
+In `src/app/layout.tsx`:
+
+```typescript
+import { Providers } from "@/components/providers";
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  );
+}
+```
+
+<Note>
+  The `ConvexProviderWithClerk` component automatically synchronizes authentication state between Clerk and Convex, passing JWT tokens to Convex queries and mutations.
+</Note>
+
+## Server-Side Integration
+
+Clerk provides server-side authentication utilities for API routes and server components.
+
+### API Route Authentication
+
+Protect API routes with Clerk's `auth()` helper:
+
+```typescript
+import { auth } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
+
+export async function POST(request: Request) {
+  const { userId } = await auth();
+
+  if (!userId) {
+    return NextResponse.json(
+      { error: "Unauthorized" }, 
+      { status: 401 }
+    );
+  }
+
+  // User is authenticated, proceed with logic
+  // userId contains the Clerk user ID
+}
+```
+
+### Retrieving OAuth Tokens
+
+Access user OAuth tokens for external API calls:
+
+```typescript
+import { clerkClient } from "@clerk/nextjs/server";
+
+const client = await clerkClient();
+const tokens = await client.users.getUserOauthAccessToken(
+  userId,
+  "github"
+);
+const githubToken = tokens.data[0]?.token;
+
+if (!githubToken) {
+  return NextResponse.json(
+    { error: "GitHub not connected" },
+    { status: 400 }
+  );
+}
+```
+
+This is used extensively for GitHub operations. See `src/app/api/github/import/route.ts:81` and `src/features/projects/inngest/export-to-github.ts:68`.
+
+## Convex Integration
+
+Clerk authentication is verified in Convex functions using the `verifyAuth` helper.
+
+### Authentication Helper
+
+In `convex/auth.ts`:
+
+```typescript
+import { MutationCtx, QueryCtx } from "./_generated/server";
+
+export const verifyAuth = async (ctx: QueryCtx | MutationCtx) => {
+  const identity = await ctx.auth.getUserIdentity();
+
+  if (!identity) {
+    throw new Error("Unauthorized");
+  }
+
+  return identity;
+};
+```
+
+### Using Authentication in Queries
+
+Protect Convex queries with authentication:
+
+```typescript
+import { query } from "./_generated/server";
+import { verifyAuth } from "./auth";
+import { v } from "convex/values";
+
+export const getById = query({
+  args: { id: v.id("projects") },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+
+    const project = await ctx.db.get(args.id);
+
+    if (!project) {
+      return null;
+    }
+
+    // Verify ownership
+    if (project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized access to this project");
+    }
+
+    return project;
+  },
+});
+```
+
+<Info>
+  The `identity.subject` field contains the Clerk user ID, which is stored as `ownerId` in Convex documents for authorization checks.
+</Info>
+
+### Using Authentication in Mutations
+
+The same pattern applies to mutations:
+
+```typescript
+import { mutation } from "./_generated/server";
+import { verifyAuth } from "./auth";
+import { v } from "convex/values";
+
+export const create = mutation({
+  args: { name: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+
+    const projectId = await ctx.db.insert("projects", {
+      name: args.name,
+      ownerId: identity.subject, // Store Clerk user ID
+      updatedAt: Date.now(),
+    });
+
+    return projectId;
+  },
+});
+```
+
+See `convex/projects.ts:34` for the full implementation.
+
+## User Identity Structure
+
+When authenticated, the `identity` object contains:
+
+```typescript
+interface UserIdentity {
+  subject: string;        // Clerk user ID
+  tokenIdentifier: string; // JWT token identifier
+  email?: string;         // User email
+  name?: string;          // User name
+  // ... other optional fields
+}
+```
+
+## GitHub OAuth Flow
+
+The GitHub OAuth integration enables repository operations:
+
+<Steps>
+  <Step title="User Connects GitHub">
+    Users connect their GitHub account through Clerk's OAuth flow in the application settings.
+  </Step>
+  
+  <Step title="Token Storage">
+    Clerk securely stores the GitHub OAuth access token associated with the user.
+  </Step>
+  
+  <Step title="Token Retrieval">
+    When performing GitHub operations (import/export), the application retrieves the token:
+    
+    ```typescript
+    const tokens = await clerkClient.users.getUserOauthAccessToken(
+      userId,
+      "github"
+    );
+    const githubToken = tokens.data[0]?.token;
+    ```
+  </Step>
+  
+  <Step title="API Authentication">
+    The token authenticates requests to the GitHub API via Octokit:
+    
+    ```typescript
+    const octokit = new Octokit({ auth: githubToken });
+    ```
+  </Step>
+</Steps>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Always Verify Auth" icon="shield-check">
+    Never skip authentication checks in Convex functions. Always use `verifyAuth()` at the start of handlers.
+  </Card>
+  
+  <Card title="Check Ownership" icon="user-lock">
+    After fetching resources, verify the authenticated user owns or has access to the resource.
+  </Card>
+  
+  <Card title="Handle Missing Tokens" icon="exclamation-triangle">
+    Always check if OAuth tokens exist before using them. Prompt users to reconnect if missing.
+  </Card>
+  
+  <Card title="Use Server-Side Auth" icon="server">
+    Perform sensitive operations server-side with `auth()` to prevent client-side manipulation.
+  </Card>
+</CardGroup>
+
+## Error Handling
+
+Common authentication errors and handling:
+
+```typescript
+// Missing authentication
+if (!userId) {
+  return NextResponse.json(
+    { error: "Unauthorized" },
+    { status: 401 }
+  );
+}
+
+// Missing OAuth connection
+if (!githubToken) {
+  return NextResponse.json(
+    { error: "GitHub not connected. Please reconnect your GitHub account." },
+    { status: 400 }
+  );
+}
+
+// Authorization failure in Convex
+if (project.ownerId !== identity.subject) {
+  throw new Error("Unauthorized access to this project");
+}
+```
+
+## Related Files
+
+- Client Provider: `src/components/providers.tsx`
+- Auth Config: `convex/auth.config.ts`
+- Auth Helper: `convex/auth.ts`
+- Example Usage: `src/app/api/github/export/route.ts:21`

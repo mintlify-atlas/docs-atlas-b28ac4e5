@@ -1,0 +1,452 @@
+---
+title: "Delete Files"
+api: "DELETE /api/files/:id"
+description: "Remove files and folders from a project"
+---
+
+## Overview
+
+The `deleteFile` mutation permanently removes a file or folder from your project. When deleting a folder, all contents (files and subfolders) are recursively deleted. This operation also cleans up any associated storage files and updates the project's `updatedAt` timestamp.
+
+<Warning>
+Deletion is permanent and cannot be undone. All nested contents in a folder will be deleted recursively.
+</Warning>
+
+## Authentication
+
+Requires authentication via Convex auth. The authenticated user must own the project containing the file.
+
+## Request
+
+<ParamField path="id" type="string" required>
+  The unique identifier of the file or folder to delete. Must be a valid Convex ID from the `files` table.
+</ParamField>
+
+## Response
+
+Returns `void` on success. The file/folder and all its contents are permanently deleted.
+
+## Code Examples
+
+<CodeGroup>
+
+```typescript TypeScript
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
+
+function DeleteFileButton({ fileId, fileName }: { 
+  fileId: Id<"files">;
+  fileName: string;
+}) {
+  const deleteFile = useMutation(api.files.deleteFile);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  const handleDelete = async () => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${fileName}"? This cannot be undone.`
+    );
+    
+    if (!confirmed) return;
+    
+    setIsDeleting(true);
+    try {
+      await deleteFile({ id: fileId });
+      console.log("File deleted successfully");
+    } catch (error) {
+      console.error("Failed to delete file:", error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+  
+  return (
+    <button onClick={handleDelete} disabled={isDeleting}>
+      {isDeleting ? "Deleting..." : "Delete"}
+    </button>
+  );
+}
+```
+
+```javascript JavaScript
+// Delete a single file
+await convex.mutation(api.files.deleteFile, {
+  id: "k17file123"
+});
+
+console.log("File deleted");
+
+// Delete a folder (and all contents)
+await convex.mutation(api.files.deleteFile, {
+  id: "k17folder456"
+});
+
+console.log("Folder and all contents deleted");
+```
+
+```python Python
+# Using Convex Python client
+client.mutation("files:deleteFile", {
+    "id": "k17file123"
+})
+
+print("File deleted successfully")
+```
+
+```bash cURL
+curl -X POST https://your-app.convex.cloud/api/mutation \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "path": "files:deleteFile",
+    "args": {
+      "id": "k17file123"
+    }
+  }'
+```
+
+</CodeGroup>
+
+## Recursive Deletion
+
+When deleting a folder, the operation:
+
+1. Finds all children (files and subfolders)
+2. Recursively deletes each child
+3. Deletes any associated storage files (`storageId`)
+4. Deletes the folder itself
+5. Updates the project's `updatedAt` timestamp
+
+### Deletion Flow
+
+```typescript
+// Internal deletion logic (from convex/files.ts)
+const deleteRecursive = async (fileId: Id<"files">) => {
+  const item = await ctx.db.get("files", fileId);
+  
+  if (!item) return;
+  
+  // If folder, delete all children first
+  if (item.type === "folder") {
+    const children = await ctx.db
+      .query("files")
+      .withIndex("by_project_parent", q => 
+        q.eq("projectId", item.projectId).eq("parentId", fileId)
+      )
+      .collect();
+    
+    for (const child of children) {
+      await deleteRecursive(child._id);
+    }
+  }
+  
+  // Delete storage file if exists
+  if (item.storageId) {
+    await ctx.storage.delete(item.storageId);
+  }
+  
+  // Delete the file/folder itself
+  await ctx.db.delete("files", fileId);
+};
+```
+
+## Batch Deletion
+
+Delete multiple files using the AI agent tool pattern:
+
+```typescript
+import { createTool } from "@inngest/agent-kit";
+import { z } from "zod";
+
+export const createDeleteFilesTool = ({ internalKey }) => {
+  return createTool({
+    name: "deleteFiles",
+    description: "Delete files or folders from the project. Folders are deleted recursively.",
+    parameters: z.object({
+      fileIds: z.array(z.string()).describe("Array of file or folder IDs to delete")
+    }),
+    handler: async ({ fileIds }, { step }) => {
+      // Validate all files exist first
+      const filesToDelete = [];
+      
+      for (const fileId of fileIds) {
+        const file = await convex.query(api.system.getFileById, {
+          internalKey,
+          fileId
+        });
+        
+        if (!file) {
+          return `Error: File with ID "${fileId}" not found.`;
+        }
+        
+        filesToDelete.push({
+          id: file._id,
+          name: file.name,
+          type: file.type
+        });
+      }
+      
+      // Delete all files
+      await step.run("delete-files", async () => {
+        const results = [];
+        
+        for (const file of filesToDelete) {
+          await convex.mutation(api.system.deleteFile, {
+            internalKey,
+            fileId: file.id
+          });
+          
+          results.push(`Deleted ${file.type} "${file.name}"`);
+        }
+        
+        return results.join("\n");
+      });
+    }
+  });
+};
+```
+
+### Batch Example
+
+```typescript
+// Delete multiple files at once
+const fileIds = ["k17file1", "k17file2", "k17folder3"];
+
+await Promise.all(
+  fileIds.map(id => 
+    convex.mutation(api.files.deleteFile, { id })
+  )
+);
+
+console.log(`Deleted ${fileIds.length} items`);
+```
+
+## Safe Deletion Pattern
+
+Implement confirmation and validation:
+
+```typescript
+async function safeDelete(
+  fileId: Id<"files">,
+  file: Doc<"files">
+) {
+  // Get file details
+  const isFolder = file.type === "folder";
+  
+  if (isFolder) {
+    // Count children
+    const children = await convex.query(api.files.getFolderContents, {
+      projectId: file.projectId,
+      parentId: fileId
+    });
+    
+    const childCount = children.length;
+    
+    // Recursive count
+    let totalCount = childCount;
+    for (const child of children) {
+      if (child.type === "folder") {
+        const nested = await countNestedFiles(child._id);
+        totalCount += nested;
+      }
+    }
+    
+    const confirmed = window.confirm(
+      `Delete folder "${file.name}" with ${totalCount} items? This cannot be undone.`
+    );
+    
+    if (!confirmed) return false;
+  } else {
+    const confirmed = window.confirm(
+      `Delete file "${file.name}"? This cannot be undone.`
+    );
+    
+    if (!confirmed) return false;
+  }
+  
+  // Perform deletion
+  await convex.mutation(api.files.deleteFile, { id: fileId });
+  return true;
+}
+```
+
+## Soft Delete Alternative
+
+For recoverable deletion, implement a soft delete pattern:
+
+```typescript
+// Add deletedAt field to schema
+files: defineTable({
+  // ... existing fields
+  deletedAt: v.optional(v.number())
+})
+
+// Soft delete mutation
+export const softDeleteFile = mutation({
+  args: { id: v.id("files") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch("files", args.id, {
+      deletedAt: Date.now()
+    });
+  }
+});
+
+// Modified list query (exclude deleted)
+export const getFiles = query({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, args) => {
+    const files = await ctx.db
+      .query("files")
+      .withIndex("by_project", q => q.eq("projectId", args.projectId))
+      .collect();
+    
+    return files.filter(f => !f.deletedAt);
+  }
+});
+
+// Restore mutation
+export const restoreFile = mutation({
+  args: { id: v.id("files") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch("files", args.id, {
+      deletedAt: undefined
+    });
+  }
+});
+```
+
+## Error Handling
+
+<ResponseField name="error" type="string">
+  Error message if the operation fails
+</ResponseField>
+
+### Common Errors
+
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| `"File not found"` | Invalid file ID or already deleted | Verify the file exists before deletion |
+| `"Project not found"` | File's project no longer exists | Check project status |
+| `"Unauthorized to access this project"` | User doesn't own the project | Verify authentication and ownership |
+
+### Error Handling Example
+
+```typescript
+try {
+  await convex.mutation(api.files.deleteFile, { id: fileId });
+  console.log("Deleted successfully");
+} catch (error) {
+  if (error.message === "File not found") {
+    console.warn("File was already deleted");
+  } else {
+    console.error("Deletion failed:", error);
+    throw error;
+  }
+}
+```
+
+## Storage Cleanup
+
+Files with `storageId` (blob storage) are automatically cleaned up:
+
+```typescript
+// Automatic cleanup in deleteFile mutation
+if (item.storageId) {
+  await ctx.storage.delete(item.storageId);
+}
+```
+
+This ensures:
+- No orphaned storage files
+- Proper storage quota management
+- Complete deletion of file data
+
+## Performance Considerations
+
+### Large Folder Deletion
+
+Deleting folders with many nested items:
+
+- Operations are recursive and may take time
+- Each child is deleted individually
+- Consider showing progress UI for large deletions
+
+```typescript
+async function deleteWithProgress(
+  folderId: Id<"files">,
+  onProgress: (current: number, total: number) => void
+) {
+  // Count total items
+  const total = await countNestedFiles(folderId);
+  let current = 0;
+  
+  // Delete with progress updates
+  const deleteRecursiveWithProgress = async (id: Id<"files">) => {
+    const item = await convex.query(api.files.getFile, { id });
+    
+    if (item.type === "folder") {
+      const children = await convex.query(api.files.getFolderContents, {
+        projectId: item.projectId,
+        parentId: id
+      });
+      
+      for (const child of children) {
+        await deleteRecursiveWithProgress(child._id);
+      }
+    }
+    
+    await convex.mutation(api.files.deleteFile, { id });
+    current++;
+    onProgress(current, total);
+  };
+  
+  await deleteRecursiveWithProgress(folderId);
+}
+```
+
+## Undo Functionality
+
+Implement undo with a temporary holding area:
+
+```typescript
+// Move to trash instead of immediate deletion
+export const moveToTrash = mutation({
+  args: { id: v.id("files") },
+  handler: async (ctx, args) => {
+    const file = await ctx.db.get("files", args.id);
+    
+    // Create trash entry
+    await ctx.db.insert("trash", {
+      originalId: file._id,
+      projectId: file.projectId,
+      fileData: file,
+      deletedAt: Date.now(),
+      expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 // 30 days
+    });
+    
+    // Delete from files table
+    await ctx.db.delete("files", args.id);
+  }
+});
+
+// Restore from trash
+export const restoreFromTrash = mutation({
+  args: { trashId: v.id("trash") },
+  handler: async (ctx, args) => {
+    const trashItem = await ctx.db.get("trash", args.trashId);
+    
+    // Restore file
+    await ctx.db.insert("files", trashItem.fileData);
+    
+    // Remove from trash
+    await ctx.db.delete("trash", args.trashId);
+  }
+});
+```
+
+## Related Endpoints
+
+- [List Files](/api/files/list) - View remaining files
+- [Create Files](/api/files/create) - Add new files
+- [Read File](/api/files/read) - Get file details before deletion
+- [Update File](/api/files/update) - Modify instead of delete

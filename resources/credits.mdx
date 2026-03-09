@@ -1,0 +1,233 @@
+---
+title: Credits System
+description: How credits work, token costs, and usage limits in Rushed AI
+icon: coins
+---
+
+## Overview
+
+Rushed AI uses a credit-based system to manage AI model usage. Credits are deducted based on the tokens consumed by Claude Sonnet and Haiku models when you interact with the AI.
+
+<Info>
+  **Credit Value**: Each credit is worth $0.30 USD
+</Info>
+
+## Credit Calculation
+
+Credits are calculated based on token usage with a 3x markup over base API costs:
+
+### Claude Sonnet 4.5
+
+- **Input tokens**: $3 per 1M tokens (base cost)
+- **Output tokens**: $15 per 1M tokens (base cost)
+- **Final cost**: Base cost × 3, converted to credits
+
+### Claude Haiku 4.5
+
+- **Input tokens**: $1 per 1M tokens (base cost)
+- **Output tokens**: $5 per 1M tokens (base cost)
+- **Final cost**: Base cost × 3, converted to credits
+
+<Note>
+  The 3x markup covers infrastructure, platform features, and ongoing development costs.
+</Note>
+
+## Credit Formula
+
+Credits are calculated using this formula:
+
+```typescript
+function calculateCredits(modelId: string, inputTokens: number, outputTokens: number): number {
+    let inputCost = 0;
+    let outputCost = 0;
+
+    if (modelId.includes("sonnet")) {
+        // Sonnet 4.5 - $3 per 1M input / $15 per 1M output
+        inputCost = 0.000003;
+        outputCost = 0.000015;
+    } else {
+        // Haiku 4.5 - $1 per 1M input / $5 per 1M output 
+        inputCost = 0.000001;
+        outputCost = 0.000005;
+    }
+
+    // Apply 3x Margin
+    const totalApiCost = (inputTokens * inputCost) + (outputTokens * outputCost);
+    const finalRetailCost = totalApiCost * 3;
+
+    return finalRetailCost / 0.30; // CREDIT_COST_USD
+}
+```
+
+## Usage Limits
+
+Each subscription plan includes protective limits to prevent unexpected costs:
+
+### Daily Credit Cap
+
+Maximum credits you can consume in a 24-hour period:
+
+<CardGroup cols={3}>
+  <Card title="Starter" icon="gauge-low">
+    **3 credits/day**
+    
+    Prevents overspending during development
+  </Card>
+  
+  <Card title="Pro" icon="gauge-high">
+    **8 credits/day**
+    
+    Supports daily shipping workflows
+  </Card>
+  
+  <Card title="Scale" icon="gauge-max">
+    **18 credits/day**
+    
+    Maximum capacity for heavy usage
+  </Card>
+</CardGroup>
+
+### Daily Token Limit
+
+Maximum tokens you can consume in a 24-hour period:
+
+<CardGroup cols={3}>
+  <Card title="Starter" icon="hash">
+    **40,000 tokens/day**
+    
+    Additional safety limit
+  </Card>
+  
+  <Card title="Pro" icon="hashtag">
+    **120,000 tokens/day**
+    
+    Extended token capacity
+  </Card>
+  
+  <Card title="Scale" icon="input-numeric">
+    **250,000 tokens/day**
+    
+    Maximum token allowance
+  </Card>
+</CardGroup>
+
+<Warning>
+  Both credit cap and token limit must have remaining capacity for requests to process. If either limit is reached, you'll need to wait until the daily reset (00:00 UTC).
+</Warning>
+
+## Credit Types
+
+### Monthly Credits
+
+- Granted at the start of each billing period
+- Based on your subscription plan (50, 150, or 400)
+- Do not roll over to the next month
+- Consumed first before credit pack credits
+
+### Credit Pack Credits
+
+- Purchased separately as one-time top-ups
+- Added immediately to your balance
+- Persist across billing cycles
+- Consumed after monthly credits are depleted
+
+<Info>
+  Your monthly credits are consumed first. Credit pack purchases act as a persistent buffer for heavy usage periods.
+</Info>
+
+## Credit Balance Management
+
+Your credit balance includes:
+
+1. **Current Balance**: Total available credits (monthly + pack)
+2. **Monthly Credits Used**: Credits consumed from your monthly allocation
+3. **Pack Credits Balance**: Remaining credits from purchased packs
+
+### Balance Deduction Order
+
+```typescript
+const monthlyRemaining = Math.max(0, creditsMonthly - monthlyCreditsUsed);
+const packConsumed = Math.max(0, creditsToDeduct - monthlyRemaining);
+const newPackBalance = Math.max(0, currentPackBalance - packConsumed);
+```
+
+## Error Handling
+
+When credits cannot be deducted, you'll receive one of these errors:
+
+<AccordionGroup>
+  <Accordion title="insufficient_credits">
+    Your credit balance is too low to complete this operation.
+    
+    **Solution**: Purchase a credit pack or wait for your monthly credit refresh.
+  </Accordion>
+  
+  <Accordion title="daily_cap_exceeded">
+    You've reached your daily credit consumption limit.
+    
+    **Solution**: Wait until the next daily reset (00:00 UTC) or upgrade your plan for higher limits.
+  </Accordion>
+  
+  <Accordion title="daily_token_limit_exceeded">
+    You've reached your daily token consumption limit.
+    
+    **Solution**: Wait until the next daily reset (00:00 UTC) or upgrade your plan for higher limits.
+  </Accordion>
+  
+  <Accordion title="subscription_inactive">
+    Your subscription is not active.
+    
+    **Solution**: Reactivate your subscription or update your payment method.
+  </Accordion>
+  
+  <Accordion title="no_subscription">
+    No subscription found for your account.
+    
+    **Solution**: Subscribe to a plan to start using Rushed AI.
+  </Accordion>
+</AccordionGroup>
+
+## Transaction History
+
+All credit transactions are logged with:
+
+- Transaction type (debit, credit, grant, refund)
+- Amount changed
+- Input/output tokens (for debit transactions)
+- Balance before and after
+- Timestamp
+- Related entity (conversation, project, etc.)
+
+You can view your transaction history in your account dashboard to track credit usage over time.
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Monitor Daily Usage" icon="chart-line">
+    Check your daily credit consumption to stay within limits and avoid interruptions.
+  </Card>
+  
+  <Card title="Purchase Credit Packs" icon="bag-shopping">
+    Keep credit packs on hand for unexpected heavy usage periods or urgent projects.
+  </Card>
+  
+  <Card title="Choose the Right Plan" icon="sliders">
+    Select a plan that matches your typical daily usage patterns to avoid hitting daily caps.
+  </Card>
+  
+  <Card title="Track Token Usage" icon="calculator">
+    Monitor both credit and token consumption as both limits apply independently.
+  </Card>
+</CardGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="View Pricing" icon="tag" href="/resources/pricing">
+    Compare subscription plans and credit packs
+  </Card>
+  
+  <Card title="FAQ" icon="circle-question" href="/resources/faq">
+    Common questions about credits and billing
+  </Card>
+</CardGroup>

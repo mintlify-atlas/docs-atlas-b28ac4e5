@@ -1,0 +1,408 @@
+---
+title: "Create Files"
+api: "POST /api/files"
+description: "Create new files and folders in a project"
+---
+
+## Overview
+
+Rushed AI provides two mutations for creating files and folders in your project. Use `createFile` for individual files or `createFiles` (batch) for creating multiple files at once. Both operations validate that files don't already exist and update the project's `updatedAt` timestamp.
+
+## Authentication
+
+Requires authentication via Convex auth. The authenticated user must own the project to create files.
+
+## Create Single File
+
+The `createFile` mutation creates a single file in the project.
+
+### Request Parameters
+
+<ParamField body="projectId" type="string" required>
+  The unique identifier of the project where the file will be created
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Name of the file including extension (e.g., `"App.tsx"`, `"README.md"`)
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  The complete file content as a string. Can be empty string for empty files.
+</ParamField>
+
+<ParamField body="parentId" type="string" optional>
+  ID of the parent folder. Omit or pass `undefined` for root-level files.
+</ParamField>
+
+### Code Examples
+
+<CodeGroup>
+
+```typescript TypeScript
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
+
+function CreateFileButton({ projectId }: { projectId: Id<"projects"> }) {
+  const createFile = useMutation(api.files.createFile);
+  
+  const handleCreate = async () => {
+    try {
+      await createFile({
+        projectId,
+        name: "hello.ts",
+        content: "export const greeting = 'Hello, World!';",
+        parentId: undefined // Root level
+      });
+      console.log("File created successfully!");
+    } catch (error) {
+      console.error("Failed to create file:", error);
+    }
+  };
+  
+  return <button onClick={handleCreate}>Create File</button>;
+}
+```
+
+```javascript JavaScript
+// Create a file at root level
+await convex.mutation(api.files.createFile, {
+  projectId: "k17project1",
+  name: "index.html",
+  content: "<!DOCTYPE html>\n<html>\n  <body>\n    <h1>Welcome</h1>\n  </body>\n</html>"
+});
+
+// Create a file in a specific folder
+await convex.mutation(api.files.createFile, {
+  projectId: "k17project1",
+  name: "Button.tsx",
+  content: "export const Button = () => <button>Click</button>;",
+  parentId: "k17folder123"
+});
+```
+
+```python Python
+# Using Convex Python client
+client.mutation("files:createFile", {
+    "projectId": "k17project1",
+    "name": "config.json",
+    "content": '{\n  "apiKey": "test",\n  "debug": true\n}',
+    "parentId": None  # Root level
+})
+```
+
+</CodeGroup>
+
+## Create Multiple Files (Batch)
+
+The `createFiles` tool (via `api.system.createFiles`) creates multiple files in the same folder efficiently.
+
+### Request Parameters
+
+<ParamField body="projectId" type="string" required>
+  The project identifier
+</ParamField>
+
+<ParamField body="parentId" type="string" optional>
+  Parent folder ID. Pass empty string or `undefined` for root level.
+</ParamField>
+
+<ParamField body="files" type="array" required>
+  Array of file objects to create
+  
+  <Expandable title="File Object Properties">
+    <ParamField body="name" type="string" required>
+      File name with extension
+    </ParamField>
+    
+    <ParamField body="content" type="string" required>
+      File content (can be empty string)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Code Examples
+
+<CodeGroup>
+
+```typescript TypeScript
+// Batch create multiple files at once
+const results = await convex.mutation(api.system.createFiles, {
+  internalKey: process.env.INTERNAL_KEY,
+  projectId: "k17project1",
+  parentId: "k17folder1", // Or undefined for root
+  files: [
+    {
+      name: "Header.tsx",
+      content: "export const Header = () => <header>App</header>;"
+    },
+    {
+      name: "Footer.tsx",
+      content: "export const Footer = () => <footer>© 2024</footer>;"
+    },
+    {
+      name: "styles.css",
+      content: "body { margin: 0; font-family: sans-serif; }"
+    }
+  ]
+});
+
+const created = results.filter(r => !r.error);
+const failed = results.filter(r => r.error);
+
+console.log(`Created ${created.length} files`);
+if (failed.length > 0) {
+  console.error(`Failed: ${failed.map(r => r.name).join(", ")}`);
+}
+```
+
+```javascript JavaScript
+// Create a complete component folder structure
+const componentFiles = [
+  {
+    name: "Button.tsx",
+    content: "import React from 'react';\nexport const Button = ({ label }) => <button>{label}</button>;"
+  },
+  {
+    name: "Button.test.tsx",
+    content: "import { render } from '@testing-library/react';\nimport { Button } from './Button';"
+  },
+  {
+    name: "Button.module.css",
+    content: ".button { padding: 8px 16px; border-radius: 4px; }"
+  },
+  {
+    name: "index.ts",
+    content: "export { Button } from './Button';"
+  }
+];
+
+await convex.mutation(api.system.createFiles, {
+  internalKey: process.env.INTERNAL_KEY,
+  projectId: projectId,
+  parentId: componentsFolder,
+  files: componentFiles
+});
+```
+
+</CodeGroup>
+
+## Create Folder
+
+The `createFolder` mutation creates a new folder in the project.
+
+### Request Parameters
+
+<ParamField body="projectId" type="string" required>
+  The project identifier
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Name of the folder (e.g., `"components"`, `"utils"`)
+</ParamField>
+
+<ParamField body="parentId" type="string" optional>
+  ID of the parent folder. Omit for root-level folders.
+</ParamField>
+
+### Code Examples
+
+<CodeGroup>
+
+```typescript TypeScript
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+
+function CreateFolderButton({ projectId }) {
+  const createFolder = useMutation(api.files.createFolder);
+  
+  const handleCreate = async () => {
+    await createFolder({
+      projectId,
+      name: "components",
+      parentId: undefined // Root level
+    });
+  };
+  
+  return <button onClick={handleCreate}>Create Folder</button>;
+}
+```
+
+```javascript JavaScript
+// Create nested folder structure
+const srcFolderId = await convex.mutation(api.files.createFolder, {
+  projectId: "k17project1",
+  name: "src"
+});
+
+const componentsFolderId = await convex.mutation(api.files.createFolder, {
+  projectId: "k17project1",
+  name: "components",
+  parentId: srcFolderId
+});
+
+const utilsFolderId = await convex.mutation(api.files.createFolder, {
+  projectId: "k17project1",
+  name: "utils",
+  parentId: srcFolderId
+});
+
+// Now create files in the folders
+await convex.mutation(api.files.createFile, {
+  projectId: "k17project1",
+  name: "Button.tsx",
+  content: "export const Button = () => <button>Click</button>;",
+  parentId: componentsFolderId
+});
+```
+
+```python Python
+# Create folder structure
+src_id = client.mutation("files:createFolder", {
+    "projectId": "k17project1",
+    "name": "src",
+    "parentId": None
+})
+
+components_id = client.mutation("files:createFolder", {
+    "projectId": "k17project1",
+    "name": "components",
+    "parentId": src_id
+})
+```
+
+</CodeGroup>
+
+## Response
+
+Both `createFile` and `createFolder` return `void` on success. The `createFiles` batch operation returns an array of results:
+
+<ResponseField name="results" type="array">
+  Array of result objects for each file
+  
+  <Expandable title="Result Properties">
+    <ResponseField name="name" type="string">
+      The file name
+    </ResponseField>
+    
+    <ResponseField name="error" type="string | undefined">
+      Error message if creation failed, `undefined` if successful
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Batch Response Example
+
+```json
+[
+  { "name": "Header.tsx" },
+  { "name": "Footer.tsx" },
+  { "name": "styles.css", "error": "File already exists" }
+]
+```
+
+## Error Handling
+
+### Common Errors
+
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| `"File already exists"` | A file with the same name exists in the target folder | Use a different name or delete the existing file |
+| `"Folder already exists"` | A folder with the same name exists in the target folder | Choose a unique folder name |
+| `"Project not found"` | Invalid `projectId` | Verify the project exists |
+| `"Unauthorized to access this project"` | User doesn't own the project | Check authentication and ownership |
+| `"Parent folder not found"` | Invalid `parentId` | Verify the folder ID using List Files |
+| `"Invalid parentId"` | `parentId` points to a file, not a folder | Use a folder ID or `undefined` |
+
+### Error Handling Example
+
+```typescript
+try {
+  await convex.mutation(api.files.createFile, {
+    projectId,
+    name: "App.tsx",
+    content: "export default function App() {}"
+  });
+} catch (error) {
+  if (error.message.includes("already exists")) {
+    console.error("A file with this name already exists");
+    // Optionally update the file instead
+    await convex.mutation(api.files.updateFile, {
+      id: existingFileId,
+      content: "export default function App() {}"
+    });
+  } else {
+    throw error;
+  }
+}
+```
+
+## Validation Rules
+
+### File Names
+
+- Must not be empty
+- Should include file extension
+- Must be unique within the parent folder
+- Case-sensitive comparisons
+
+### Folder Names
+
+- Must not be empty
+- Should not include file extensions
+- Must be unique within the parent folder
+
+### Content
+
+- Can be empty string
+- Stored as UTF-8 text
+- No size limit enforced at creation (large files may be moved to storage)
+
+## Best Practices
+
+### Use Batch Creation
+
+When creating multiple files in the same folder:
+
+```typescript
+// ❌ Slow: Multiple individual mutations
+for (const file of files) {
+  await createFile({ projectId, ...file });
+}
+
+// ✅ Fast: Single batch mutation
+await createFiles({ projectId, files });
+```
+
+### Create Folder Structure First
+
+```typescript
+// Create folders first
+const srcId = await createFolder({ projectId, name: "src" });
+const componentsId = await createFolder({ projectId, name: "components", parentId: srcId });
+
+// Then create files
+await createFile({
+  projectId,
+  name: "Button.tsx",
+  content: "...",
+  parentId: componentsId
+});
+```
+
+### Handle Duplicates Gracefully
+
+```typescript
+const results = await createFiles({ projectId, files });
+
+const failed = results.filter(r => r.error);
+if (failed.length > 0) {
+  console.warn(`Skipped existing files: ${failed.map(r => r.name).join(", ")}`);
+}
+```
+
+## Related Endpoints
+
+- [List Files](/api/files/list) - View created files
+- [Update File](/api/files/update) - Modify file content
+- [Delete Files](/api/files/delete) - Remove files/folders

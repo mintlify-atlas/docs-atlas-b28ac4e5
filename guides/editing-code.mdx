@@ -1,0 +1,418 @@
+---
+title: Editing Code
+description: Master the CodeMirror-powered editor in Rushed AI to write and modify code effectively
+---
+
+## Overview
+
+Rushed AI includes a powerful CodeMirror-based code editor with syntax highlighting, auto-completion, and modern editing features. While the AI can generate and modify code, the editor gives you full control for manual edits and fine-tuning.
+
+## Opening Files
+
+Files open in the editor when you click them in the file explorer.
+
+<Steps>
+  <Step title="Click a File">
+    Single-click any file in the file explorer to open it in a temporary tab. The file content loads in the editor.
+  </Step>
+
+  <Step title="Pin the Tab (Optional)">
+    Double-click a file to open it in a pinned tab. Pinned tabs stay open when you navigate to other files.
+    
+    <Tip>
+      Single-clicked files open in temporary tabs that get replaced when you click another file. This keeps your workspace clean.
+    </Tip>
+  </Step>
+
+  <Step title="View File Breadcrumbs">
+    The breadcrumb navigation above the editor shows the full path to your current file:
+    ```text
+    src > components > Button.tsx
+    ```
+  </Step>
+</Steps>
+
+```typescript
+// Opening files updates the editor state
+const { openFile } = useEditor(projectId);
+
+// Temporary tab (single click)
+openFile(item._id, { pinned: false });
+
+// Pinned tab (double click)
+openFile(item._id, { pinned: true });
+```
+
+## Editor Features
+
+### Syntax Highlighting
+
+The editor automatically detects file types and applies appropriate syntax highlighting:
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    - `.js`, `.jsx`, `.ts`, `.tsx` files
+    - Full React/JSX support
+    - TypeScript type highlighting
+  </Tab>
+
+  <Tab title="Markup">
+    - `.html`, `.xml`, `.svg` files
+    - Tag and attribute highlighting
+    - Proper nesting visualization
+  </Tab>
+
+  <Tab title="Stylesheets">
+    - `.css`, `.scss`, `.sass` files
+    - Property and value highlighting
+    - Selector recognition
+  </Tab>
+
+  <Tab title="Configuration">
+    - `.json`, `.yaml`, `.yml` files
+    - `.env` files
+    - Proper formatting validation
+  </Tab>
+
+  <Tab title="Other">
+    - `.md`, `.mdx` (Markdown)
+    - `.py` (Python)
+    - Generic text for unknown types
+  </Tab>
+</Tabs>
+
+```typescript
+// Language detection from filename
+const languageExtension = useMemo(() => {
+  return getLanguageExtension(fileName);
+}, [fileName]);
+```
+
+### Auto-Save
+
+Changes save automatically after you stop typing:
+
+<Note>
+  **Debounce time: 1.5 seconds**
+  
+  The editor waits 1.5 seconds after your last keystroke before saving. This prevents excessive database writes while you type.
+</Note>
+
+```typescript
+const DEBOUNCE_MS = 1500;
+
+// Auto-save implementation
+EditorView.updateListener.of((update) => {
+  if (update.docChanged) {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    
+    timeoutRef.current = setTimeout(() => {
+      updateFile({ id: activeFile._id, content });
+    }, DEBOUNCE_MS);
+  }
+})
+```
+
+<Warning>
+  Changes are saved locally. They don't affect any live deployment until you export or deploy your project.
+</Warning>
+
+### Code Minimap
+
+The right side of the editor displays a minimap showing an overview of your entire file:
+
+- **Visual Overview** - See your whole file structure at a glance
+- **Quick Navigation** - Click the minimap to jump to different sections
+- **Current Position** - Highlighted area shows your viewport location
+
+<Tip>
+  The minimap is especially useful in long files. Use it to quickly navigate between functions or sections.
+</Tip>
+
+### Indentation Markers
+
+Vertical lines indicate indentation levels, making it easy to:
+- Track code block boundaries
+- Identify nesting levels
+- Spot indentation errors
+
+### Theme Support
+
+The editor respects your system theme preference:
+
+<Tabs>
+  <Tab title="Dark Mode">
+    Uses the One Dark theme with:
+    - High contrast syntax colors
+    - Dark background (#282c34)
+    - Reduced eye strain
+  </Tab>
+
+  <Tab title="Light Mode">
+    Uses a custom light theme with:
+    - Readable syntax colors
+    - Light background
+    - Optimized for daylight viewing
+  </Tab>
+</Tabs>
+
+```typescript
+const { resolvedTheme } = useTheme();
+
+const themeExtensions = useMemo(() => {
+  return resolvedTheme === "dark" 
+    ? [oneDark, customTheme] 
+    : [customTheme];
+}, [resolvedTheme]);
+```
+
+## Keyboard Shortcuts
+
+### Essential Shortcuts
+
+<Tabs>
+  <Tab title="Navigation">
+    | Shortcut | Action |
+    |----------|--------|
+    | `⌘/Ctrl + K` | Open project command palette |
+    | `⌘/Ctrl + S` | Save (auto-save handles this) |
+    | `⌘/Ctrl + F` | Find in file |
+    | `⌘/Ctrl + H` | Find and replace |
+  </Tab>
+
+  <Tab title="Editing">
+    | Shortcut | Action |
+    |----------|--------|
+    | `Tab` | Indent line or selection |
+    | `Shift + Tab` | Outdent line or selection |
+    | `⌘/Ctrl + /` | Toggle line comment |
+    | `⌘/Ctrl + D` | Select next occurrence |
+    | `⌘/Ctrl + L` | Select line |
+  </Tab>
+
+  <Tab title="Selection">
+    | Shortcut | Action |
+    |----------|--------|
+    | `⌘/Ctrl + A` | Select all |
+    | `Shift + Arrow` | Extend selection |
+    | `⌘/Ctrl + Shift + L` | Select all occurrences |
+    | `Option/Alt + Click` | Add cursor |
+  </Tab>
+</Tabs>
+
+### Tab Key Behavior
+
+```typescript
+import { indentWithTab } from "@codemirror/commands";
+
+// Tab key inserts spaces or tabs based on context
+keymap.of([indentWithTab])
+```
+
+The Tab key intelligently handles indentation:
+- Indents current line if no selection
+- Indents all lines in selection
+- Maintains proper spacing
+
+## Working with Selections
+
+### Selecting Code
+
+Multiple ways to select code:
+
+<Steps>
+  <Step title="Click and Drag">
+    The traditional method - click where you want to start, hold, and drag to where you want to end.
+  </Step>
+
+  <Step title="Double-Click">
+    Double-click a word to select it entirely.
+  </Step>
+
+  <Step title="Triple-Click">
+    Triple-click to select the entire line.
+  </Step>
+
+  <Step title="Keyboard Selection">
+    Hold Shift and use arrow keys to extend your selection character by character or line by line.
+  </Step>
+</Steps>
+
+### Selection Tooltip
+
+When you select code, a tooltip appears with contextual actions:
+
+<Card title="Add to Chat" icon="message-chat">
+  Sends the selected code to the conversation sidebar with the filename as a tag. Perfect for asking the AI about specific code sections.
+  
+  ```typescript
+  // Triggers a custom event
+  window.dispatchEvent(
+    new CustomEvent("rushed:add-to-chat", {
+      detail: { text, fileName }
+    })
+  );
+  ```
+</Card>
+
+<Tip>
+  Select a function or component and click "Add to Chat" to ask questions like "Explain what this does" or "Refactor this to use hooks".
+</Tip>
+
+## Binary Files
+
+Some files can't be displayed in the text editor:
+
+<Warning>
+  Binary files (images, PDFs, etc.) and files with unsupported encodings display a warning message instead of content.
+</Warning>
+
+You'll see:
+```text
+The file is not displayed in the text editor because it is
+either binary or uses an unsupported text encoding.
+```
+
+To work with these files:
+- View images in the preview panel
+- Download and edit locally
+- Replace through file management
+
+## Empty Editor State
+
+When no file is open, the editor shows helpful hints:
+
+```text
+Rushed
+
+[@] Type @ to tag files
+[Select] Select code to chat
+[⌘ K] Search projects
+```
+
+This reminds you of key features:
+- `@` - Tag files in conversation
+- Select code - Add selections to chat
+- `⌘ K` - Quick project search
+
+## Best Practices
+
+### Organizing Your Workspace
+
+<Card title="Use Multiple Tabs" icon="window">
+  Pin frequently-used files (double-click) and let temporary tabs handle quick edits (single-click).
+</Card>
+
+<Card title="Leverage AI for Boilerplate" icon="robot">
+  Use the AI for generating repetitive code, then manually refine in the editor.
+</Card>
+
+<Card title="Review AI Changes" icon="eye">
+  Always review files the AI modifies. The editor makes it easy to spot and fix issues.
+</Card>
+
+### Efficient Editing Workflow
+
+1. **AI generates the base** - Let the AI create the initial structure
+2. **Manual refinement** - Use the editor for precise adjustments
+3. **Iterate with AI** - Select problematic code and add to chat for AI fixes
+4. **Final polish** - Manual edits for perfect formatting and style
+
+### When to Edit Manually vs. Using AI
+
+<Tabs>
+  <Tab title="Use the Editor For">
+    ✅ Small syntax fixes
+    ✅ Renaming variables
+    ✅ Adjusting formatting
+    ✅ Quick value changes
+    ✅ Adding comments
+    ✅ Fine-tuning styles
+  </Tab>
+
+  <Tab title="Use AI For">
+    ✅ Generating new components
+    ✅ Large-scale refactoring
+    ✅ Adding new features
+    ✅ Implementing complex logic
+    ✅ Converting between patterns
+    ✅ Fixing multi-file issues
+  </Tab>
+</Tabs>
+
+## Troubleshooting
+
+### Syntax Highlighting Incorrect
+
+If colors look wrong:
+1. Check the file extension is correct
+2. Rename the file if needed
+3. Refresh the page to reload the editor
+
+### Changes Not Saving
+
+If edits seem to disappear:
+1. Wait for the 1.5-second debounce period
+2. Check your internet connection
+3. Look for error messages in the browser console
+4. Try refreshing and re-editing
+
+### Editor Feels Slow
+
+For very large files:
+1. Consider breaking into smaller modules
+2. Check browser performance
+3. Close unnecessary tabs
+4. Refresh the page
+
+### Can't Select Text Properly
+
+If selection behaves oddly:
+1. Make sure you're clicking in the editor area
+2. Try using keyboard selection (Shift + arrows)
+3. Refresh the page if issues persist
+
+## Advanced Features
+
+### Quick Edit Extension
+
+The editor includes a custom "quick edit" extension for context-aware operations based on the current file:
+
+```typescript
+import { quickEdit } from "../extensions/quick-edit";
+
+// File-specific quick actions
+extensions: [
+  quickEdit(fileName),
+  // ... other extensions
+]
+```
+
+### Custom Setup
+
+Rushed AI uses a customized CodeMirror setup optimized for web development:
+
+```typescript
+import { customSetup } from "../extensions/custom-setup";
+
+// Includes:
+// - Basic setup (line numbers, history, etc.)
+// - Bracket matching
+// - Auto-closing brackets and quotes
+// - Multiple cursors
+// - Search and replace
+extensions: [customSetup]
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Managing Files" icon="folder" href="/guides/managing-files">
+    Learn file operations like create, rename, and delete
+  </Card>
+  <Card title="Working with AI" icon="robot" href="/guides/working-with-ai">
+    Use AI conversations to generate and refine code
+  </Card>
+</CardGroup>

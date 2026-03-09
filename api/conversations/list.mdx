@@ -1,0 +1,205 @@
+---
+title: "List Conversations"
+api: "GET /api/conversations/list"
+description: "Retrieve all conversations for a project, ordered by most recently updated"
+---
+
+## Overview
+
+Retrieves all conversations belonging to a specific project. Conversations are returned in descending order by `updatedAt` timestamp, showing the most recently active conversations first. This endpoint is useful for displaying a conversation history sidebar or managing multiple chat sessions within a project.
+
+## Authentication
+
+This endpoint requires authentication via Clerk. The authenticated user must own the project.
+
+## Query Parameters
+
+<ParamField query="projectId" type="string" required>
+  The ID of the project to list conversations for. Must be a valid Convex ID for the `projects` table.
+</ParamField>
+
+## Response
+
+<ResponseField name="conversations" type="array">
+  Array of conversation objects belonging to the project, ordered by most recent first.
+  
+  <Expandable title="Conversation Object">
+    <ResponseField name="_id" type="string">
+      Unique conversation identifier
+    </ResponseField>
+    
+    <ResponseField name="projectId" type="string">
+      Reference to the parent project
+    </ResponseField>
+    
+    <ResponseField name="title" type="string">
+      Conversation title. Defaults to "New Conversation" but is automatically updated with a contextual title after the first message is sent.
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="number">
+      Unix timestamp in milliseconds indicating when the conversation was last updated (when a message was added)
+    </ResponseField>
+    
+    <ResponseField name="_creationTime" type="number">
+      Unix timestamp in milliseconds when the conversation was created (automatically added by Convex)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Request
+
+<CodeGroup>
+
+```typescript TypeScript
+import { ConvexClient } from "convex/browser";
+import { api } from "./convex/_generated/api";
+import { Id } from "./convex/_generated/dataModel";
+
+const convex = new ConvexClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+
+// Get all conversations for a project
+const conversations = await convex.query(
+  api.conversations.getByProject,
+  {
+    projectId: "k57abc123def4567" as Id<"projects">
+  }
+);
+
+conversations.forEach(conv => {
+  console.log(`${conv.title} - Last updated: ${new Date(conv.updatedAt).toLocaleString()}`);
+});
+```
+
+```javascript JavaScript
+const { ConvexClient } = require("convex/browser");
+const { api } = require("./convex/_generated/api");
+
+const convex = new ConvexClient(process.env.NEXT_PUBLIC_CONVEX_URL);
+
+// Get all conversations for a project
+const conversations = await convex.query(
+  api.conversations.getByProject,
+  {
+    projectId: "k57abc123def4567"
+  }
+);
+
+conversations.forEach(conv => {
+  console.log(`${conv.title} - Last updated: ${new Date(conv.updatedAt).toLocaleString()}`);
+});
+```
+
+```bash cURL
+curl -X GET "https://your-app.convex.cloud/api/query?path=conversations:getByProject&args=%7B%22projectId%22%3A%22k57abc123def4567%22%7D" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+</CodeGroup>
+
+## Example Response
+
+```json
+[
+  {
+    "_id": "k17xyz789abc1234",
+    "projectId": "k57abc123def4567",
+    "title": "Implement user authentication",
+    "updatedAt": 1709856234567,
+    "_creationTime": 1709850000000
+  },
+  {
+    "_id": "k17mno456pqr7890",
+    "projectId": "k57abc123def4567",
+    "title": "Fix navbar styling issues",
+    "updatedAt": 1709843156789,
+    "_creationTime": 1709840000000
+  },
+  {
+    "_id": "k17def234ghi5678",
+    "projectId": "k57abc123def4567",
+    "title": "Add API rate limiting",
+    "updatedAt": 1709801234567,
+    "_creationTime": 1709800000000
+  }
+]
+```
+
+## Error Responses
+
+### Empty Array Response
+
+If the project exists but has no conversations, or if the project doesn't exist, an empty array is returned:
+
+```json
+[]
+```
+
+### Common Errors
+
+- **"Unauthorized to access this project"** - The authenticated user does not own the project
+- **"Unauthorized"** - No valid authentication token provided
+
+## Ordering and Indexing
+
+Conversations are retrieved using the `by_project` index on the `conversations` table, which indexes on `projectId`. Results are ordered in descending order by the internal Convex creation time, with the most recently updated conversations appearing first.
+
+The query uses:
+```typescript
+.withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+.order("desc")
+```
+
+## Usage Patterns
+
+### Display Conversation List
+
+```typescript
+const conversations = await convex.query(api.conversations.getByProject, {
+  projectId: currentProjectId
+});
+
+return (
+  <div className="conversation-list">
+    {conversations.map(conv => (
+      <ConversationItem
+        key={conv._id}
+        id={conv._id}
+        title={conv.title}
+        lastUpdated={conv.updatedAt}
+      />
+    ))}
+  </div>
+);
+```
+
+### Find Most Recent Conversation
+
+```typescript
+const conversations = await convex.query(api.conversations.getByProject, {
+  projectId: currentProjectId
+});
+
+const mostRecent = conversations[0]; // Already sorted by most recent
+```
+
+### Check if Project Has Conversations
+
+```typescript
+const conversations = await convex.query(api.conversations.getByProject, {
+  projectId: currentProjectId
+});
+
+const hasConversations = conversations.length > 0;
+```
+
+## Performance Considerations
+
+- This endpoint uses an indexed query for optimal performance
+- All conversations for a project are loaded at once (no pagination)
+- For projects with many conversations (100+), consider implementing pagination or limiting results
+- The query is reactive in Convex - it will automatically update when conversations change
+
+## Related Endpoints
+
+- [Create Conversation](/api/conversations/create) - Create a new conversation
+- [Get Messages](/api/conversations/messages) - Retrieve messages from a specific conversation

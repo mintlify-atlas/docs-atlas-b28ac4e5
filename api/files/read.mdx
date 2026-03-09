@@ -1,0 +1,282 @@
+---
+title: "Read Files"
+api: "GET /api/files/:id"
+description: "Retrieve file content and metadata"
+---
+
+## Overview
+
+The `getFile` query retrieves detailed information about a specific file or folder, including its content. This endpoint is used when you need to read file contents, display file information, or verify file metadata.
+
+## Authentication
+
+Requires authentication via Convex auth. The authenticated user must own the project containing the file.
+
+## Request
+
+<ParamField path="id" type="string" required>
+  The unique identifier of the file or folder. Must be a valid Convex ID from the `files` table.
+</ParamField>
+
+## Response
+
+Returns a complete file object with all metadata and content.
+
+<ResponseField name="_id" type="string">
+  Unique identifier for the file or folder
+</ResponseField>
+
+<ResponseField name="projectId" type="string">
+  ID of the parent project
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Name of the file or folder (includes extension for files)
+</ResponseField>
+
+<ResponseField name="type" type="enum">
+  Either `"file"` or `"folder"`
+</ResponseField>
+
+<ResponseField name="parentId" type="string | null">
+  ID of the parent folder. `null` for root-level items.
+</ResponseField>
+
+<ResponseField name="content" type="string | undefined">
+  The complete file content as a string. Only present for files (not folders). May be `undefined` for empty files.
+</ResponseField>
+
+<ResponseField name="storageId" type="string | undefined">
+  Convex storage ID if the file is stored in blob storage (for large files or binary content)
+</ResponseField>
+
+<ResponseField name="updatedAt" type="number">
+  Unix timestamp in milliseconds of the last modification
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+
+```typescript TypeScript
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
+
+function FileViewer({ fileId }: { fileId: Id<"files"> }) {
+  const file = useQuery(api.files.getFile, { id: fileId });
+  
+  if (!file) return <div>Loading...</div>;
+  
+  if (file.type === "folder") {
+    return <div>📁 {file.name} (folder)</div>;
+  }
+  
+  return (
+    <div>
+      <h2>📄 {file.name}</h2>
+      <pre>
+        <code>{file.content}</code>
+      </pre>
+      <small>Last updated: {new Date(file.updatedAt).toLocaleString()}</small>
+    </div>
+  );
+}
+```
+
+```javascript JavaScript
+// Read a single file
+const file = await convex.query(api.files.getFile, {
+  id: "k17file123"
+});
+
+console.log(`File: ${file.name}`);
+console.log(`Type: ${file.type}`);
+console.log(`Content length: ${file.content?.length || 0} chars`);
+
+// Read multiple files (batch pattern)
+const fileIds = ["k17file1", "k17file2", "k17file3"];
+const files = await Promise.all(
+  fileIds.map(id => convex.query(api.files.getFile, { id }))
+);
+
+const totalLines = files.reduce((sum, f) => 
+  sum + (f.content?.split('\n').length || 0), 0
+);
+console.log(`Total lines across ${files.length} files: ${totalLines}`);
+```
+
+```python Python
+# Using Convex Python client
+file = client.query("files:getFile", {
+    "id": "k17file123"
+})
+
+if file["type"] == "file":
+    content = file.get("content", "")
+    lines = content.split("\n")
+    print(f"{file['name']}: {len(lines)} lines")
+else:
+    print(f"{file['name']} is a folder")
+```
+
+```bash cURL
+curl -X POST https://your-app.convex.cloud/api/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "path": "files:getFile",
+    "args": {
+      "id": "k17file123"
+    }
+  }'
+```
+
+</CodeGroup>
+
+## Reading Multiple Files
+
+For efficient batch reading of multiple files, use the `readFiles` tool pattern:
+
+```typescript
+// AI agent tool implementation
+const results: { id: string; name: string; content: string }[] = [];
+
+for (const fileId of fileIds) {
+  const file = await convex.query(api.files.getFile, { id: fileId });
+  
+  if (file && file.content) {
+    results.push({
+      id: file._id,
+      name: file.name,
+      content: file.content
+    });
+  }
+}
+
+return results;
+```
+
+## File Path Resolution
+
+To get the full path of a file (e.g., `src/components/Button.tsx`), use the `getFilePath` query:
+
+<ParamField query="id" type="string" required>
+  The file ID to resolve the path for
+</ParamField>
+
+### Example
+
+```typescript
+const path = await convex.query(api.files.getFilePath, {
+  id: "k17file123"
+});
+
+// Returns: [
+//   { _id: "k17folder1", name: "src" },
+//   { _id: "k17folder2", name: "components" },
+//   { _id: "k17file123", name: "Button.tsx" }
+// ]
+
+const fullPath = path.map(p => p.name).join('/');
+console.log(fullPath); // "src/components/Button.tsx"
+```
+
+## Response Examples
+
+### File Response
+
+```json
+{
+  "_id": "k17file123",
+  "projectId": "k17project1",
+  "name": "App.tsx",
+  "type": "file",
+  "parentId": "k17folder1",
+  "content": "import React from 'react';\n\nexport default function App() {\n  return <h1>Hello World</h1>;\n}",
+  "updatedAt": 1709856000000
+}
+```
+
+### Folder Response
+
+```json
+{
+  "_id": "k17folder1",
+  "projectId": "k17project1",
+  "name": "src",
+  "type": "folder",
+  "parentId": null,
+  "updatedAt": 1709856000000
+}
+```
+
+### File with Storage
+
+```json
+{
+  "_id": "k17file456",
+  "projectId": "k17project1",
+  "name": "large-data.json",
+  "type": "file",
+  "parentId": null,
+  "storageId": "kg2abc123",
+  "updatedAt": 1709856000000
+}
+```
+
+## Error Handling
+
+<ResponseField name="error" type="string">
+  Error message if the operation fails
+</ResponseField>
+
+### Common Errors
+
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| `"File not found"` | Invalid file ID or file was deleted | Verify the file ID exists using List Files |
+| `"Project not found"` | File's project no longer exists | Check project status |
+| `"Unauthorized to access this project"` | User doesn't own the project | Verify authentication and ownership |
+
+## Content Handling
+
+### Text Files
+
+Text files (`.txt`, `.md`, `.ts`, `.js`, etc.) have their content stored directly in the `content` field as a UTF-8 string.
+
+### Large Files
+
+Files exceeding certain size thresholds may be stored in Convex blob storage:
+
+- Check for `storageId` field
+- If present, retrieve content via Convex storage API
+- The `content` field may be `undefined` for storage-backed files
+
+```typescript
+if (file.storageId) {
+  // Retrieve from storage
+  const url = await convex.query(api.storage.getUrl, {
+    storageId: file.storageId
+  });
+  const response = await fetch(url);
+  const content = await response.text();
+}
+```
+
+### Binary Files
+
+Binary files (images, PDFs, etc.) are typically stored in blob storage with `storageId` and no `content` field.
+
+## Performance Considerations
+
+- **Caching**: File content doesn't change frequently - implement client-side caching
+- **Batch Reads**: Use `Promise.all()` for reading multiple files in parallel
+- **Large Files**: Files over 1MB may be stored in blob storage
+- **Reactivity**: Use `useQuery` in React to automatically update when files change
+
+## Related Endpoints
+
+- [List Files](/api/files/list) - Get all files in a project
+- [Update File](/api/files/update) - Modify file content
+- [Get File Path](/api/files/read#file-path-resolution) - Resolve full path

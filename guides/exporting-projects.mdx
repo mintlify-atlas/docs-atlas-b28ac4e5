@@ -1,0 +1,484 @@
+---
+title: Exporting Projects
+description: Export your Rushed AI projects to GitHub repositories for deployment and collaboration
+---
+
+## Overview
+
+Once you've built your application in Rushed AI, export it to GitHub to:
+- Deploy to hosting platforms (Vercel, Netlify, etc.)
+- Collaborate with team members
+- Version control your code
+- Integrate with CI/CD pipelines
+- Continue development locally
+
+<Note>
+  GitHub export requires a **Pro subscription** and a connected GitHub account.
+</Note>
+
+## Prerequisites
+
+Before exporting, ensure:
+
+<Steps>
+  <Step title="Pro Subscription">
+    Upgrade to Rushed AI Pro if you haven't already. GitHub export is a Pro-only feature.
+    
+    Check your plan in account settings or visit `/pricing` to upgrade.
+  </Step>
+
+  <Step title="GitHub Account Connected">
+    Connect your GitHub account through account settings. This gives Rushed AI permission to create repositories on your behalf.
+  </Step>
+
+  <Step title="Project Ready">
+    Make sure your project is complete and all changes are saved. The export creates a snapshot of your current project state.
+  </Step>
+</Steps>
+
+<Warning>
+  Free tier users will see an upgrade prompt when attempting to export. GitHub integration requires Pro due to the advanced infrastructure needed.
+</Warning>
+
+## Starting an Export
+
+<Steps>
+  <Step title="Open Export Dialog">
+    Click the **Export** button in the project toolbar (top-right of the workspace).
+    
+    The button shows the GitHub icon: <img src="/images/github-icon.png" alt="GitHub" class="inline h-4" />
+  </Step>
+
+  <Step title="Configure Repository">
+    A popover appears with export settings:
+    
+    **Repository Name**
+    - Your project name is suggested by default
+    - Must contain only alphanumeric characters, hyphens, underscores, and dots
+    - Example: `bright-lion-blue` or `my-awesome-app`
+    
+    <Tip>
+      The repository name doesn't have to match your project name. Choose something descriptive and professional.
+    </Tip>
+  </Step>
+
+  <Step title="Choose Visibility">
+    Select repository visibility:
+    
+    <Tabs>
+      <Tab title="Private (Recommended)">
+        - Only you and collaborators can see the repository
+        - Code is not publicly accessible
+        - Ideal for client work or proprietary projects
+        - **Default setting**
+      </Tab>
+      
+      <Tab title="Public">
+        - Anyone on GitHub can see your code
+        - Appears in your public GitHub profile
+        - Required for open source projects
+        - Good for portfolio pieces
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Add Description (Optional)">
+    Provide a repository description (up to 350 characters):
+    ```text
+    A modern todo application built with React and Tailwind CSS
+    ```
+    
+    This appears on the GitHub repository page.
+  </Step>
+
+  <Step title="Create Repository">
+    Click **Create Repository** to start the export process.
+  </Step>
+</Steps>
+
+```typescript
+// Export request payload
+await ky.post("/api/github/export", {
+  json: {
+    projectId,
+    repoName: "my-awesome-app",
+    visibility: "private",
+    description: "A modern web application",
+    source: "project_toolbar",
+  },
+});
+```
+
+## Export Process
+
+After clicking Create Repository, the export goes through several stages:
+
+### 1. Validation
+
+Rushed AI verifies:
+- ✅ You have an active Pro subscription
+- ✅ Your GitHub account is connected
+- ✅ The repository name is valid and available
+- ✅ You have remaining export quota
+
+### 2. Exporting Status
+
+While exporting, you'll see:
+
+<Card icon="loading">
+  **Exporting to GitHub...**
+  
+  A loading spinner indicates the export is in progress.
+  
+  You can click **Cancel** to stop the export if needed.
+</Card>
+
+During this phase, Rushed AI:
+1. Gathers all project files and folders
+2. Preserves your folder structure
+3. Creates the GitHub repository
+4. Pushes all code to the new repository
+5. Sets up repository settings
+
+```typescript
+// Export triggers an Inngest workflow
+await inngest.send({
+  name: "github/export.repo",
+  data: {
+    projectId,
+    repoName,
+    visibility,
+    description,
+    userId,
+  },
+});
+```
+
+### 3. Completion
+
+When export succeeds:
+
+<Card icon="check-circle">
+  **Repository created**
+  
+  Your project has been exported to GitHub.
+  
+  <Button>View on GitHub</Button>
+</Card>
+
+Click **View on GitHub** to open your new repository in a new tab.
+
+## What Gets Exported
+
+Your GitHub repository includes:
+
+### File Structure
+
+```text
+my-awesome-app/
+├── src/
+│   ├── components/
+│   │   ├── Button.tsx
+│   │   └── Header.tsx
+│   ├── hooks/
+│   │   └── useAuth.ts
+│   ├── App.tsx
+│   └── index.tsx
+├── public/
+│   └── index.html
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+The exact structure matches your Rushed AI file tree.
+
+### File Contents
+
+- All code files with their current content
+- Configuration files (package.json, tsconfig.json, etc.)
+- Static assets (if any)
+- Documentation files
+
+### What's NOT Included
+
+<Warning>
+  These items are not exported:
+  - Conversation history
+  - Project settings (install/dev commands)
+  - Edit history or undo states
+  - Temporary files or caches
+</Warning>
+
+Only your actual project files are exported to GitHub.
+
+## After Exporting
+
+### Clone Locally
+
+To continue development on your machine:
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/my-awesome-app.git
+cd my-awesome-app
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+### Deploy to Hosting
+
+Connect your GitHub repository to deployment platforms:
+
+<Tabs>
+  <Tab title="Vercel">
+    1. Go to [vercel.com](https://vercel.com)
+    2. Click "New Project"
+    3. Import your GitHub repository
+    4. Configure build settings
+    5. Deploy
+    
+    Vercel auto-detects frameworks like Next.js, React, and more.
+  </Tab>
+  
+  <Tab title="Netlify">
+    1. Go to [netlify.com](https://netlify.com)
+    2. Click "Add new site" → "Import an existing project"
+    3. Connect to GitHub
+    4. Select your repository
+    5. Configure and deploy
+  </Tab>
+  
+  <Tab title="GitHub Pages">
+    For static sites:
+    1. Go to repository Settings
+    2. Navigate to Pages
+    3. Select branch and folder
+    4. Save
+    
+    Your site deploys to `https://yourusername.github.io/repo-name`
+  </Tab>
+</Tabs>
+
+### Continue Development
+
+You can:
+- **Keep building in Rushed AI** - Changes stay in Rushed until you export again
+- **Work locally** - Clone and develop on your machine
+- **Hybrid approach** - Use Rushed AI for rapid prototyping, refine locally
+
+<Tip>
+  Each export creates a fresh snapshot. If you make changes locally and in Rushed AI, you'll need to manually merge them.
+</Tip>
+
+## Re-Exporting Projects
+
+If you've already exported a project:
+
+### First Export: Repository Created
+
+The first export creates the repository and pushes all files.
+
+### Subsequent Exports: Not Yet Supported
+
+<Warning>
+  Currently, Rushed AI does not support updating existing repositories. Each export must be to a new repository name.
+</Warning>
+
+To update an existing repository:
+1. Export to a new temporary repository
+2. Clone both repositories locally
+3. Manually merge changes
+4. Push to your original repository
+
+<Note>
+  Future updates will support direct repository updates and sync between Rushed AI and GitHub.
+</Note>
+
+## Export Status Indicators
+
+The Export button shows different states:
+
+<Tabs>
+  <Tab title="Default">
+    <img src="/images/export-default.png" alt="Export button" class="max-w-xs" />
+    
+    GitHub icon - No export in progress
+  </Tab>
+  
+  <Tab title="Exporting">
+    <img src="/images/export-loading.png" alt="Exporting" class="max-w-xs" />
+    
+    Spinning loader - Export in progress
+  </Tab>
+  
+  <Tab title="Completed">
+    <img src="/images/export-success.png" alt="Completed" class="max-w-xs" />
+    
+    Green checkmark - Export succeeded
+  </Tab>
+  
+  <Tab title="Failed">
+    <img src="/images/export-error.png" alt="Failed" class="max-w-xs" />
+    
+    Red X - Export failed
+  </Tab>
+</Tabs>
+
+```typescript
+// Status icons based on export state
+const getStatusIcon = () => {
+  if (exportStatus === "exporting") {
+    return <LoadingIcon className="animate-spin" />;
+  }
+  if (exportStatus === "completed") {
+    return <SuccessIcon className="text-emerald-500" />;
+  }
+  if (exportStatus === "failed") {
+    return <ErrorIcon className="text-red-500" />;
+  }
+  return <GitHubIcon />;
+};
+```
+
+## Cancelling Exports
+
+If you need to cancel an export in progress:
+
+<Steps>
+  <Step title="Open Export Popover">
+    Click the Export button (it shows a loading state).
+  </Step>
+  
+  <Step title="Click Cancel">
+    The popover shows a "Cancel" button while exporting. Click it.
+  </Step>
+  
+  <Step title="Export Stops">
+    The export process stops, and any partially created repository is cleaned up.
+  </Step>
+</Steps>
+
+```typescript
+// Cancel endpoint
+await ky.post("/api/github/export/cancel", {
+  json: { projectId, source: "project_toolbar" },
+});
+```
+
+<Warning>
+  Cancellation may take a few seconds. Wait for confirmation before starting a new export.
+</Warning>
+
+## Troubleshooting
+
+### "Pro plan required" Error
+
+<Card icon="lock">
+  **Solution:** Upgrade to Rushed AI Pro
+  
+  GitHub export is a Pro-only feature. Click "Subscribe" to upgrade.
+</Card>
+
+### "GitHub not connected" Error
+
+<Card icon="github">
+  **Solution:** Connect your GitHub account
+  
+  1. Go to Account Settings
+  2. Find GitHub Integration
+  3. Click "Connect GitHub"
+  4. Authorize Rushed AI
+</Card>
+
+### "Repository name already exists" Error
+
+<Card icon="alert">
+  **Solution:** Choose a different name
+  
+  A repository with that name already exists in your GitHub account. Use a different name or delete the existing repository first.
+</Card>
+
+### Export Failed
+
+If export fails without a specific error:
+
+1. **Check GitHub Status** - Visit [githubstatus.com](https://githubstatus.com)
+2. **Retry** - Click "Retry" in the export popover
+3. **Try Different Name** - Use a different repository name
+4. **Contact Support** - If issues persist, reach out to Rushed AI support
+
+### Export Hangs Forever
+
+If export seems stuck:
+
+1. Wait at least 5 minutes (large projects take time)
+2. Refresh the page to check status
+3. Cancel and retry if still stuck
+4. Check your GitHub account to see if the repository was created
+
+## Best Practices
+
+<Card title="Test Locally First" icon="terminal">
+  After exporting, clone and test locally before deploying to production.
+  ```bash
+  git clone https://github.com/yourusername/repo.git
+  cd repo
+  npm install
+  npm run dev
+  ```
+</Card>
+
+<Card title="Use Private for Client Work" icon="lock">
+  Always use private repositories for client projects or proprietary code. Only use public for open source or portfolio pieces.
+</Card>
+
+<Card title="Add a Good README" icon="book">
+  Before exporting, create a README.md in Rushed AI explaining:
+  - What the project does
+  - How to install and run it
+  - Technologies used
+  - Any special configuration
+</Card>
+
+<Card title="Clean Up Before Export" icon="broom">
+  Remove:
+  - Unused files and folders
+  - Test/debug code
+  - Commented-out sections
+  - Placeholder content
+</Card>
+
+## Deployment Checklist
+
+Before deploying your exported project:
+
+- [ ] Environment variables configured
+- [ ] API keys secured (not in code)
+- [ ] Build command working locally
+- [ ] Dependencies up to date
+- [ ] README includes setup instructions
+- [ ] .gitignore includes sensitive files
+- [ ] Tests passing (if applicable)
+- [ ] Production build tested
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deploy to Vercel" icon="cloud" href="https://vercel.com/docs">
+    Deploy your exported project to Vercel
+  </Card>
+  <Card title="GitHub Basics" icon="github" href="https://docs.github.com">
+    Learn GitHub fundamentals
+  </Card>
+  <Card title="Creating Projects" icon="plus" href="/guides/creating-projects">
+    Start a new project in Rushed AI
+  </Card>
+  <Card title="Working with AI" icon="robot" href="/guides/working-with-ai">
+    Continue building with AI assistance
+  </Card>
+</CardGroup>

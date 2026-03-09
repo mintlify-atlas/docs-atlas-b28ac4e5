@@ -1,0 +1,414 @@
+---
+title: 'Update Project Settings'
+api: 'PATCH /api/projects/:id (via Convex)'
+description: 'Update project configuration including build and development commands'
+---
+
+This endpoint updates project settings such as install and development commands. Projects are modified via Convex mutations rather than traditional REST endpoints.
+
+## Authentication
+
+Requires a valid Clerk authentication session. Users can only update projects they own.
+
+## Convex Mutation
+
+Use the `api.projects.updateSettings` Convex mutation to update project settings:
+
+```typescript
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+const updateSettings = useMutation(api.projects.updateSettings);
+```
+
+## Parameters
+
+<ParamField body="id" type="string" required>
+  The unique Convex identifier of the project to update.
+  
+  **Format:** Convex ID string (e.g., `"jd7x8k9m2n5p6q8r"`)
+</ParamField>
+
+<ParamField body="settings" type="object" required>
+  An object containing the project settings to update. Only include fields you want to modify.
+  
+  <Expandable title="Settings Object">
+    <ParamField body="installCommand" type="string">
+      Command to install project dependencies. This is executed when setting up the project environment.
+      
+      **Common values:**
+      - `"npm install"` - npm package manager
+      - `"yarn"` or `"yarn install"` - Yarn package manager
+      - `"pnpm install"` - pnpm package manager
+      - `"bun install"` - Bun package manager
+      
+      **Validation:** Optional string, no minimum/maximum length restrictions
+    </ParamField>
+    
+    <ParamField body="devCommand" type="string">
+      Command to start the development server. This is executed when running the project in development mode.
+      
+      **Common values:**
+      - `"npm run dev"` - npm script
+      - `"yarn dev"` - Yarn script  
+      - `"pnpm dev"` - pnpm script
+      - `"vite"` - Vite dev server
+      - `"next dev"` - Next.js dev server
+      - `"npm start"` - Standard start script
+      
+      **Validation:** Optional string, no minimum/maximum length restrictions
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+The mutation doesn't return a value on success. The project is updated in the database with:
+- Modified `settings` object
+- Updated `updatedAt` timestamp set to current time
+
+## Error Responses
+
+<Expandable title="Error Types">
+  All errors are thrown as JavaScript `Error` objects with descriptive messages.
+</Expandable>
+
+### Project Not Found
+
+Thrown when the specified project ID doesn't exist in the database.
+
+```typescript
+Error: Project not found
+```
+
+### Unauthorized
+
+Thrown when the authenticated user doesn't own the project they're trying to update.
+
+```typescript
+Error: Unauthorized to update this project
+```
+
+### Unauthenticated
+
+Thrown when no valid authentication session is provided.
+
+```typescript
+Error: Unauthenticated access
+```
+
+## Example Usage
+
+<CodeGroup>
+```typescript React Hook
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { Id } from "../convex/_generated/dataModel";
+
+function ProjectSettings({ projectId }: { projectId: Id<"projects"> }) {
+  const updateSettings = useMutation(api.projects.updateSettings);
+  
+  const handleSave = async () => {
+    try {
+      await updateSettings({
+        id: projectId,
+        settings: {
+          installCommand: "npm install",
+          devCommand: "npm run dev"
+        }
+      });
+      console.log("Settings updated successfully");
+    } catch (error) {
+      console.error("Failed to update settings:", error);
+    }
+  };
+  
+  return (
+    <button onClick={handleSave}>
+      Save Settings
+    </button>
+  );
+}
+```
+
+```typescript Update Install Command Only
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function UpdateInstallCommand({ projectId, command }) {
+  const updateSettings = useMutation(api.projects.updateSettings);
+  
+  const handleUpdate = async () => {
+    await updateSettings({
+      id: projectId,
+      settings: {
+        installCommand: command
+        // devCommand is not included, so it won't be modified
+      }
+    });
+  };
+  
+  return <button onClick={handleUpdate}>Update Install Command</button>;
+}
+```
+
+```typescript Form with State
+import { useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { Id } from "../convex/_generated/dataModel";
+
+function SettingsForm({ projectId }: { projectId: Id<"projects"> }) {
+  const [installCmd, setInstallCmd] = useState("npm install");
+  const [devCmd, setDevCmd] = useState("npm run dev");
+  const [saving, setSaving] = useState(false);
+  
+  const updateSettings = useMutation(api.projects.updateSettings);
+  
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    
+    try {
+      await updateSettings({
+        id: projectId,
+        settings: {
+          installCommand: installCmd,
+          devCommand: devCmd
+        }
+      });
+      alert("Settings saved!");
+    } catch (error) {
+      alert(`Error: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+  
+  return (
+    <form onSubmit={handleSubmit}>
+      <div>
+        <label>Install Command:</label>
+        <input
+          type="text"
+          value={installCmd}
+          onChange={(e) => setInstallCmd(e.target.value)}
+        />
+      </div>
+      <div>
+        <label>Dev Command:</label>
+        <input
+          type="text"
+          value={devCmd}
+          onChange={(e) => setDevCmd(e.target.value)}
+        />
+      </div>
+      <button type="submit" disabled={saving}>
+        {saving ? "Saving..." : "Save Settings"}
+      </button>
+    </form>
+  );
+}
+```
+
+```typescript Server Action
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "../convex/_generated/api";
+import { Id } from "../convex/_generated/dataModel";
+
+const client = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+
+// Must be called with user authentication context
+async function updateProjectSettings(
+  projectId: Id<"projects">,
+  installCommand: string,
+  devCommand: string
+) {
+  await client.mutation(api.projects.updateSettings, {
+    id: projectId,
+    settings: {
+      installCommand,
+      devCommand
+    }
+  });
+}
+```
+
+```typescript Error Handling
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function SafeUpdateSettings({ projectId, settings }) {
+  const updateSettings = useMutation(api.projects.updateSettings);
+  
+  const handleUpdate = async () => {
+    try {
+      await updateSettings({ id: projectId, settings });
+      return { success: true };
+    } catch (error) {
+      if (error.message === "Project not found") {
+        return { success: false, error: "This project no longer exists" };
+      }
+      if (error.message === "Unauthorized to update this project") {
+        return { success: false, error: "You don't have permission to edit this project" };
+      }
+      return { success: false, error: "An unexpected error occurred" };
+    }
+  };
+  
+  return <button onClick={handleUpdate}>Update</button>;
+}
+```
+</CodeGroup>
+
+## Common Use Cases
+
+### Setting Up a New Framework
+
+```typescript
+// Next.js project
+await updateSettings({
+  id: projectId,
+  settings: {
+    installCommand: "npm install",
+    devCommand: "npm run dev"
+  }
+});
+
+// Vite project
+await updateSettings({
+  id: projectId,
+  settings: {
+    installCommand: "npm install",
+    devCommand: "vite"
+  }
+});
+
+// Create React App
+await updateSettings({
+  id: projectId,
+  settings: {
+    installCommand: "npm install",
+    devCommand: "npm start"
+  }
+});
+```
+
+### Switching Package Managers
+
+```typescript
+// From npm to yarn
+await updateSettings({
+  id: projectId,
+  settings: {
+    installCommand: "yarn",
+    devCommand: "yarn dev"
+  }
+});
+
+// From npm to pnpm
+await updateSettings({
+  id: projectId,
+  settings: {
+    installCommand: "pnpm install",
+    devCommand: "pnpm dev"
+  }
+});
+```
+
+### Custom Build Scripts
+
+```typescript
+// Monorepo with workspace
+await updateSettings({
+  id: projectId,
+  settings: {
+    installCommand: "npm install",
+    devCommand: "npm run dev --workspace=apps/web"
+  }
+});
+
+// Turborepo
+await updateSettings({
+  id: projectId,
+  settings: {
+    installCommand: "npm install",
+    devCommand: "turbo dev"
+  }
+});
+```
+
+## Implementation Details
+
+### Partial Updates
+
+The `settings` object supports partial updates. Only the fields you include will be modified:
+
+```typescript
+// This only updates installCommand, leaving devCommand unchanged
+await updateSettings({
+  id: projectId,
+  settings: {
+    installCommand: "yarn"
+  }
+});
+```
+
+### Timestamp Management
+
+Each successful update automatically sets `updatedAt` to the current timestamp:
+
+```typescript
+await ctx.db.patch(args.id, {
+  settings: args.settings,
+  updatedAt: Date.now()
+});
+```
+
+This ensures project lists are properly sorted by recent activity.
+
+### Authorization Flow
+
+1. Extract user identity from authentication context
+2. Fetch the project from database by ID
+3. Verify project exists (return error if not)
+4. Verify user owns the project (compare `ownerId` with `identity.subject`)
+5. Apply updates if authorized
+
+### Real-time Updates
+
+Since Convex mutations are reactive, any UI components querying the project will automatically reflect the updated settings without manual refreshing.
+
+## Related Mutations
+
+### Rename Project
+
+To update the project name instead of settings:
+
+```typescript
+import { api } from "../convex/_generated/api";
+
+const rename = useMutation(api.projects.rename);
+
+await rename({
+  id: projectId,
+  name: "my-awesome-project"
+});
+```
+
+### Delete Project
+
+To permanently delete a project and all associated data:
+
+```typescript
+import { api } from "../convex/_generated/api";
+
+const deleteProject = useMutation(api.projects.deleteProject);
+
+await deleteProject({ id: projectId });
+```
+
+## Related Endpoints
+
+- [List Projects](/api/projects/list) - Retrieve all user projects
+- [Create Project](/api/projects/create) - Create a new project

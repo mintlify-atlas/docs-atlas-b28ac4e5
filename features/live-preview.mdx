@@ -1,0 +1,539 @@
+---
+title: Live Preview
+description: Real-time WebContainer-powered preview with automatic reloading and integrated terminal
+icon: display
+---
+
+## Overview
+
+Rushed AI features a **WebContainer-powered live preview** that runs your web applications directly in the browser. Built on the same technology as StackBlitz, WebContainers provide a complete Node.js environment with npm, file system access, and development servers—all running client-side.
+
+<Note>
+WebContainers use **COEP: credentialless** mode for security isolation while maintaining cross-origin resource access.
+</Note>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="In-Browser Runtime" icon="browser">
+    Full Node.js environment runs entirely in your browser—no remote servers needed.
+  </Card>
+  
+  <Card title="Hot Reloading" icon="rotate">
+    File changes are automatically synced to the WebContainer for instant preview updates.
+  </Card>
+  
+  <Card title="Integrated Terminal" icon="terminal">
+    View real-time output from install and dev commands with collapsible terminal panel.
+  </Card>
+  
+  <Card title="Custom Commands" icon="gear">
+    Configure install and dev commands per project (defaults: `npm install`, `npm run dev`).
+  </Card>
+  
+  <Card title="Singleton Instance" icon="layer-group">
+    Single WebContainer instance shared across projects for optimal performance.
+  </Card>
+  
+  <Card title="Automatic Restarts" icon="power-off">
+    Restart button tears down and reboots the container with updated settings.
+  </Card>
+</CardGroup>
+
+## WebContainer Integration
+
+The preview system uses a singleton WebContainer instance:
+
+```typescript
+import { WebContainer } from "@webcontainer/api";
+
+// Singleton instance
+let webcontainerInstance: WebContainer | null = null;
+let bootPromise: Promise<WebContainer> | null = null;
+
+const getWebContainer = async (): Promise<WebContainer> => {
+  if (webcontainerInstance) {
+    return webcontainerInstance;
+  }
+
+  if (!bootPromise) {
+    bootPromise = WebContainer.boot({ coep: "credentialless" });
+  }
+
+  webcontainerInstance = await bootPromise;
+  return webcontainerInstance;
+};
+
+const teardownWebContainer = () => {
+  if (webcontainerInstance) {
+    webcontainerInstance.teardown();
+    webcontainerInstance = null;
+  }
+  bootPromise = null;
+};
+```
+
+<Accordion title="Why a Singleton?">
+WebContainers are expensive to boot and maintain. Using a singleton pattern:
+- Reduces memory overhead
+- Speeds up project switching (same container, different mounted files)
+- Simplifies lifecycle management
+- Prevents multiple conflicting Node.js processes
+</Accordion>
+
+## Preview Lifecycle
+
+The preview follows a structured boot sequence:
+
+<Steps>
+  <Step title="Booting">
+    WebContainer instance is created with COEP configuration. Status: `"booting"`
+  </Step>
+  
+  <Step title="Mounting Files">
+    Project files are converted to a file tree and mounted to the container's virtual file system.
+  </Step>
+  
+  <Step title="Installing">
+    Install command runs (default: `npm install`). Terminal output is streamed. Status: `"installing"`
+  </Step>
+  
+  <Step title="Starting Dev Server">
+    Dev command runs (default: `npm run dev`). Server port is detected automatically.
+  </Step>
+  
+  <Step title="Running">
+    Preview URL is generated and iframe is loaded. Status: `"running"`
+  </Step>
+</Steps>
+
+### Implementation
+
+```typescript
+const start = async () => {
+  try {
+    setStatus("booting");
+    setError(null);
+    setTerminalOutput("");
+
+    const appendOutput = (data: string) => {
+      setTerminalOutput((prev) => prev + data);
+    };
+
+    const container = await getWebContainer();
+    containerRef.current = container;
+
+    // Mount files
+    const fileTree = buildFileTree(files);
+    await container.mount(fileTree);
+
+    // Listen for server ready event
+    container.on("server-ready", (_port, url) => {
+      setPreviewUrl(url);
+      setStatus("running");
+    });
+
+    // Install dependencies
+    setStatus("installing");
+    const installCmd = settings?.installCommand || "npm install";
+    const [installBin, ...installArgs] = installCmd.split(" ");
+    appendOutput(`$ ${installCmd}\n`);
+    
+    const installProcess = await container.spawn(installBin, installArgs);
+    installProcess.output.pipeTo(
+      new WritableStream({
+        write(data) {
+          appendOutput(data);
+        },
+      })
+    );
+    
+    const installExitCode = await installProcess.exit;
+    if (installExitCode !== 0) {
+      throw new Error(`${installCmd} failed with code ${installExitCode}`);
+    }
+
+    // Start dev server
+    const devCmd = settings?.devCommand || "npm run dev";
+    const [devBin, ...devArgs] = devCmd.split(" ");
+    appendOutput(`\n$ ${devCmd}\n`);
+    
+    const devProcess = await container.spawn(devBin, devArgs);
+    devProcess.output.pipeTo(
+      new WritableStream({
+        write(data) {
+          appendOutput(data);
+        },
+      })
+    );
+  } catch (error) {
+    setError(error instanceof Error ? error.message : "Unknown error");
+    setStatus("error");
+  }
+};
+```
+
+## File Tree Building
+
+Project files are converted to WebContainer's file tree format:
+
+```typescript
+interface FileTree {
+  [name: string]: {
+    file?: { contents: string };
+    directory?: FileTree;
+  };
+}
+
+// Example output:
+{
+  "package.json": {
+    file: { contents: '{"name":"my-app",...}' }
+  },
+  "src": {
+    directory: {
+      "index.tsx": {
+        file: { contents: 'import React from "react";...' }
+      },
+      "components": {
+        directory: {
+          "Button.tsx": {
+            file: { contents: 'export const Button = () => {...}' }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+<Tip>
+The `buildFileTree` utility recursively traverses the flat file list and constructs the nested directory structure required by WebContainer.
+</Tip>
+
+## Hot Reloading
+
+File changes are automatically synced to the WebContainer:
+
+```typescript
+useEffect(() => {
+  const container = containerRef.current;
+  if (!container || !files || status !== "running") return;
+
+  const filesMap = new Map(files.map((f) => [f._id, f]));
+
+  for (const file of files) {
+    if (file.type !== "file" || file.storageId || !file.content) continue;
+
+    const filePath = getFilePath(file, filesMap);
+    container.fs.writeFile(filePath, file.content);
+  }
+}, [files, status]);
+```
+
+<Steps>
+  <Step title="Detect Changes">
+    React hook triggers when `files` array changes (Convex reactivity).
+  </Step>
+  
+  <Step title="Skip Non-Text Files">
+    Only syncs text files (binary files with `storageId` are skipped).
+  </Step>
+  
+  <Step title="Resolve Paths">
+    Converts file IDs to full paths by traversing parent relationships.
+  </Step>
+  
+  <Step title="Write to Container">
+    Updates files in WebContainer's virtual file system using `container.fs.writeFile`.
+  </Step>
+</Steps>
+
+<Note>
+Most dev servers (Vite, Next.js, etc.) automatically detect file changes and trigger hot module replacement (HMR).
+</Note>
+
+## Terminal Output
+
+The terminal displays real-time output from both install and dev commands:
+
+```typescript
+const [terminalOutput, setTerminalOutput] = useState("");
+
+const appendOutput = (data: string) => {
+  setTerminalOutput((prev) => prev + data);
+};
+
+// Stream install output
+installProcess.output.pipeTo(
+  new WritableStream({
+    write(data) {
+      appendOutput(data);
+    },
+  })
+);
+
+// Stream dev output
+devProcess.output.pipeTo(
+  new WritableStream({
+    write(data) {
+      appendOutput(data);
+    },
+  })
+);
+```
+
+### Terminal Component
+
+```tsx
+import { PreviewTerminal } from "@/features/preview/components/preview-terminal";
+
+<PreviewTerminal output={terminalOutput} />
+```
+
+The terminal panel is collapsible and shows:
+- Command being run (e.g., `$ npm install`)
+- Real-time stdout/stderr from the process
+- ANSI color codes for formatted output
+- Auto-scroll to follow latest output
+
+## Preview UI
+
+The preview view includes multiple components:
+
+```tsx
+export const PreviewView = ({ projectId }: { projectId: Id<"projects"> }) => {
+  const project = useProject(projectId);
+  const [showTerminal, setShowTerminal] = useState(true);
+
+  const { status, previewUrl, error, restart, terminalOutput } = useWebContainer({
+    projectId,
+    enabled: true,
+    settings: project?.settings,
+  });
+
+  const isLoading = status === "booting" || status === "installing";
+
+  return (
+    <div className="h-full flex flex-col bg-background">
+      {/* Top toolbar */}
+      <div className="flex items-center justify-between p-2 px-4 gap-2 border-b">
+        {/* Restart button */}
+        <Button onClick={restart} disabled={isLoading}>
+          <RefreshIcon className={isLoading ? "animate-spin" : ""} />
+        </Button>
+
+        {/* URL bar */}
+        <div className="flex-1 max-w-xl mx-auto">
+          {isLoading ? (
+            <Shimmer>{status === "booting" ? "Starting..." : "Installing..."}</Shimmer>
+          ) : (
+            <span>{previewUrl || "https://localhost:3000"}</span>
+          )}
+        </div>
+
+        {/* Terminal toggle + settings */}
+        <Button onClick={() => setShowTerminal((v) => !v)}>
+          <TerminalIcon />
+        </Button>
+        <PreviewSettingsPopover projectId={projectId} onSave={restart} />
+      </div>
+
+      {/* Content area */}
+      <Allotment vertical>
+        <Allotment.Pane>
+          {error && <ErrorDisplay error={error} onRestart={restart} />}
+          {isLoading && <LoadingDisplay status={status} />}
+          {previewUrl && <iframe src={previewUrl} className="size-full" />}
+        </Allotment.Pane>
+
+        {showTerminal && (
+          <Allotment.Pane minSize={100} maxSize={500} preferredSize={200}>
+            <PreviewTerminal output={terminalOutput} />
+          </Allotment.Pane>
+        )}
+      </Allotment>
+    </div>
+  );
+};
+```
+
+<Accordion title="UI Components">
+- **Refresh Button**: Tears down and restarts the WebContainer
+- **URL Bar**: Displays preview URL or loading status with shimmer effect
+- **Copy Button**: Copies preview URL to clipboard (visible on hover)
+- **Terminal Toggle**: Shows/hides the terminal panel
+- **Settings Popover**: Configure install and dev commands
+- **Allotment Panels**: Resizable split view between preview and terminal
+- **Error Display**: Shows error message with retry button
+- **Loading Display**: Shows status during boot/install phases
+- **Iframe**: Renders the preview URL in a sandboxed iframe
+</Accordion>
+
+## Custom Settings
+
+Users can configure commands per project:
+
+```tsx
+<PreviewSettingsPopover
+  projectId={projectId}
+  initialValues={project?.settings}
+  onSave={restart}
+/>
+```
+
+Settings include:
+- **Install Command**: Default `npm install`, can be changed to `yarn install`, `pnpm install`, etc.
+- **Dev Command**: Default `npm run dev`, can be changed to `npm start`, `vite`, etc.
+
+When settings are saved, the `restart` callback is triggered to apply the new configuration.
+
+## Restart Functionality
+
+The restart button provides a clean slate:
+
+```typescript
+const restart = useCallback(() => {
+  teardownWebContainer();
+  containerRef.current = null;
+  hasStartedRef.current = false;
+  setStatus("idle");
+  setPreviewUrl(null);
+  setError(null);
+  setRestartKey((k) => k + 1);  // Triggers re-run of boot effect
+}, []);
+```
+
+<Steps>
+  <Step title="Teardown">
+    Destroys the existing WebContainer instance and resets singleton references.
+  </Step>
+  
+  <Step title="Reset State">
+    Clears status, URL, error, and ref flags.
+  </Step>
+  
+  <Step title="Increment Key">
+    Triggers the `useEffect` to re-run the boot sequence with fresh state.
+  </Step>
+</Steps>
+
+## Error Handling
+
+The preview gracefully handles errors:
+
+<CardGroup cols={2}>
+  <Card title="Boot Failures" icon="exclamation-triangle">
+    If WebContainer fails to boot, displays error message with restart button.
+  </Card>
+  
+  <Card title="Install Failures" icon="box">
+    Non-zero exit codes from install command show error with command and exit code.
+  </Card>
+  
+  <Card title="Network Issues" icon="wifi">
+    COEP/CORS errors are caught and displayed with troubleshooting guidance.
+  </Card>
+  
+  <Card title="Missing Files" icon="file-slash">
+    Empty or invalid file trees prevent boot and show descriptive error.
+  </Card>
+</CardGroup>
+
+```typescript
+try {
+  // Boot and install logic
+} catch (error) {
+  setError(error instanceof Error ? error.message : "Unknown error");
+  setStatus("error");
+}
+```
+
+## Server Ready Detection
+
+WebContainer automatically detects when a dev server starts:
+
+```typescript
+container.on("server-ready", (port, url) => {
+  setPreviewUrl(url);  // e.g., "https://abc123-3000.local.webcontainer.io"
+  setStatus("running");
+});
+```
+
+The `server-ready` event fires when:
+- A process binds to a port (e.g., 3000, 5173, 8080)
+- The server responds to HTTP requests
+- WebContainer generates a publicly accessible URL
+
+<Tip>
+WebContainer URLs use a special `.local.webcontainer.io` domain that resolves to the local WebContainer instance.
+</Tip>
+
+## Performance Optimizations
+
+<Steps>
+  <Step title="Singleton Pattern">
+    Reuses WebContainer instance across projects for faster switching.
+  </Step>
+  
+  <Step title="Lazy Booting">
+    WebContainer only boots when preview is first enabled, not on page load.
+  </Step>
+  
+  <Step title="Incremental Syncing">
+    Only changed files are written to the container during hot reload.
+  </Step>
+  
+  <Step title="Streaming Output">
+    Terminal output is streamed incrementally rather than buffered.
+  </Step>
+  
+  <Step title="Debounced Writes">
+    File changes are debounced to prevent excessive WebContainer writes.
+  </Step>
+</Steps>
+
+## Iframe Sandboxing
+
+The preview iframe uses secure sandbox attributes:
+
+```tsx
+<iframe
+  src={previewUrl}
+  className="size-full border-0"
+  title="Preview"
+  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+/>
+```
+
+<Accordion title="Sandbox Permissions">
+- `allow-scripts`: Enables JavaScript execution
+- `allow-same-origin`: Allows access to same-origin resources
+- `allow-forms`: Enables form submission
+- `allow-popups`: Allows opening new windows
+- `allow-presentation`: Enables fullscreen API
+
+**Not allowed**:
+- Top navigation (`allow-top-navigation`)
+- Modal dialogs (`allow-modals`)
+- Pointer lock (`allow-pointer-lock`)
+</Accordion>
+
+## Cleanup & Lifecycle
+
+The hook handles cleanup when the component unmounts:
+
+```typescript
+useEffect(() => {
+  if (!enabled) {
+    hasStartedRef.current = false;
+    setStatus("idle");
+    setPreviewUrl(null);
+    setError(null);
+  }
+}, [enabled]);
+```
+
+<Note>
+The WebContainer singleton is **not** destroyed on unmount to allow fast re-mounting. Call `restart()` or navigate away to fully tear down.
+</Note>

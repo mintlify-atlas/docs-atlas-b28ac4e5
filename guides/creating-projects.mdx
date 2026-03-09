@@ -1,0 +1,223 @@
+---
+title: Creating Projects
+description: Learn how to create new projects in Rushed AI using AI prompts or blank templates
+---
+
+## Overview
+
+Rushed AI offers two ways to create new projects: generating a complete application from an AI prompt, or starting with a blank project to build from scratch. Both methods create a fully-functional project environment with file management, code editing, and AI assistance.
+
+## Creating a Project from a Prompt
+
+The fastest way to start building is by describing your application idea to Rushed AI.
+
+<Steps>
+  <Step title="Navigate to the Dashboard">
+    From your Rushed AI dashboard or landing page, locate the prompt input area.
+  </Step>
+
+  <Step title="Describe Your Application">
+    Enter a clear, detailed prompt describing what you want to build. Be specific about:
+    - The type of application (web app, landing page, dashboard, etc.)
+    - Key features and functionality
+    - Design preferences or style requirements
+    - Technologies you prefer (if any)
+
+    <Tip>
+      Better prompts lead to better results. Instead of "build a todo app", try "create a modern todo application with categories, due dates, and a clean minimal design using React and Tailwind CSS".
+    </Tip>
+  </Step>
+
+  <Step title="Submit and Wait for Generation">
+    Click the submit button or press Enter. Rushed AI will:
+    - Create a new project with a unique name (e.g., "bright-lion-blue")
+    - Generate a conversation to process your request
+    - Create an assistant message with "processing" status
+    - Trigger the code generation workflow
+
+    <Note>
+      Project creation requires credits. Free tier users receive limited credits, while Pro subscribers get unlimited project creation.
+    </Note>
+  </Step>
+
+  <Step title="Review Generated Code">
+    Once generation completes, your project opens automatically with:
+    - A complete file structure in the file explorer
+    - Generated code files based on your prompt
+    - An active conversation showing the AI's response
+    - A live preview of your application (when applicable)
+  </Step>
+</Steps>
+
+### How Prompt-Based Creation Works
+
+When you submit a prompt, Rushed AI:
+
+1. **Validates your request** - Checks authentication and credit availability
+2. **Creates the project structure** - Generates a unique project name and initializes the database
+3. **Starts a conversation** - Creates the first conversation with your prompt as the initial message
+4. **Queues the AI workflow** - Sends your request to the Inngest message processing system
+5. **Generates code** - The AI analyzes your prompt and creates files, folders, and code
+6. **Updates in real-time** - You see progress as files are created and the assistant responds
+
+```typescript
+// The API endpoint creates the project and conversation
+const { projectId, conversationId } = await convex.mutation(
+  api.system.createProjectWithConversation,
+  {
+    internalKey,
+    projectName,
+    conversationTitle: DEFAULT_CONVERSATION_TITLE,
+    ownerId: userId,
+  },
+);
+
+// Your prompt becomes the first user message
+await convex.mutation(api.system.createMessage, {
+  internalKey,
+  conversationId,
+  projectId,
+  role: "user",
+  content: prompt,
+});
+```
+
+<Warning>
+  If project creation fails due to insufficient credits, you'll see an error message with options to upgrade or purchase credits.
+</Warning>
+
+## Creating a Blank Project
+
+Start with an empty canvas to build your application from scratch.
+
+<Steps>
+  <Step title="Click New Project">
+    From the dashboard home or sidebar, click the "New Project" or "+" button.
+  </Step>
+
+  <Step title="Project Initialization">
+    Rushed AI creates a blank project with:
+    - A unique auto-generated name
+    - An empty file structure
+    - No initial conversations
+    - A clean workspace ready for development
+  </Step>
+
+  <Step title="Start Building">
+    Begin by:
+    - Creating files and folders in the file explorer
+    - Writing code in the editor
+    - Starting a conversation with AI for assistance
+    - Configuring project settings as needed
+  </Step>
+</Steps>
+
+### Blank Project Structure
+
+Blank projects start minimal:
+
+```typescript
+// Creates just the project record
+const projectId = await convex.mutation(
+  api.system.createProject,
+  {
+    internalKey,
+    name: projectName,
+    ownerId: userId,
+  },
+);
+```
+
+<Tip>
+  Blank projects are ideal when you want full control over the initial structure, or when you're starting with code from another source.
+</Tip>
+
+## Project Naming
+
+All projects receive an auto-generated name using a combination of:
+- An adjective (e.g., "bright")
+- An animal (e.g., "lion")
+- A color (e.g., "blue")
+
+Result: `bright-lion-blue`
+
+<Note>
+  You can rename projects anytime from the project settings or file explorer header. Project names don't need to be unique.
+</Note>
+
+## Credit Requirements
+
+<Tabs>
+  <Tab title="Prompt-Based Projects">
+    Creating projects from prompts consumes credits because:
+    - AI processing is required to understand your prompt
+    - Code generation uses AI models
+    - Multiple files may be created and populated
+
+    **Credit consumption depends on:**
+    - Complexity of the prompt
+    - Amount of code generated
+    - Number of files created
+  </Tab>
+
+  <Tab title="Blank Projects">
+    Blank projects do **not** require credits to create because:
+    - No AI processing occurs
+    - No code generation happens
+    - You're just initializing an empty workspace
+
+    Credits are only used when you start AI conversations or request code generation.
+  </Tab>
+</Tabs>
+
+## Project Settings
+
+After creating a project, you can configure:
+
+- **Install Command** - The command to install dependencies (e.g., `npm install`)
+- **Dev Command** - The command to start the development server (e.g., `npm run dev`)
+- **Project Name** - Rename your project anytime
+
+These settings help Rushed AI understand how to run and preview your application.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Working with AI" icon="message-chat" href="/guides/working-with-ai">
+    Learn how to use conversational AI to build features
+  </Card>
+  <Card title="Managing Files" icon="folder" href="/guides/managing-files">
+    Create, organize, and manage your project files
+  </Card>
+  <Card title="Editing Code" icon="code" href="/guides/editing-code">
+    Use the powerful CodeMirror editor effectively
+  </Card>
+  <Card title="Exporting Projects" icon="github" href="/guides/exporting-projects">
+    Export your project to GitHub
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### "Insufficient Credits" Error
+
+If you see this error when creating a project:
+1. Check your credit balance in account settings
+2. Purchase additional credits or upgrade to Pro
+3. Try creating a blank project instead (no credits required)
+
+### Project Creation Hangs
+
+If project creation seems stuck:
+1. Check your internet connection
+2. Refresh the page - your project may have been created
+3. Check the projects list in your dashboard
+4. Contact support if the issue persists
+
+### Generated Code Doesn't Match Prompt
+
+If the AI generates unexpected code:
+1. Start a new conversation in the project
+2. Provide more specific instructions
+3. Use the "@" mention feature to reference specific files
+4. Ask the AI to refine or rebuild specific components

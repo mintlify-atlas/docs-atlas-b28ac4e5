@@ -1,0 +1,468 @@
+---
+title: "Authentication"
+description: "Learn how to authenticate with the Rushed AI API using Clerk"
+---
+
+## Overview
+
+Rushed AI uses [Clerk](https://clerk.com) for authentication and user management. All API requests must include a valid authentication token from Clerk.
+
+## Authentication Flow
+
+<Steps>
+  <Step title="User Signs In">
+    Users sign in via Clerk using email/password or OAuth providers (GitHub, Google, etc.)
+  </Step>
+  
+  <Step title="Clerk Issues JWT">
+    Clerk generates a JSON Web Token (JWT) for the authenticated user
+  </Step>
+  
+  <Step title="Include Token in Requests">
+    The client includes the JWT in API requests via the Authorization header
+  </Step>
+  
+  <Step title="Server Validates Token">
+    The server validates the JWT and extracts the user identity
+  </Step>
+</Steps>
+
+## Getting Started with Clerk
+
+### Environment Variables
+
+Configure these environment variables in your application:
+
+```bash .env
+# Clerk Configuration
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+CLERK_JWT_ISSUER_DOMAIN=your-domain.clerk.accounts.dev
+```
+
+<Info>
+  You can find these values in your [Clerk Dashboard](https://dashboard.clerk.com).
+</Info>
+
+### Client-Side Setup
+
+Wrap your application with Clerk's provider:
+
+```typescript app/layout.tsx
+import { ClerkProvider } from '@clerk/nextjs'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <ClerkProvider>
+      <html lang="en">
+        <body>{children}</body>
+      </html>
+    </ClerkProvider>
+  )
+}
+```
+
+### Getting the Auth Token
+
+#### In React Components
+
+Use Clerk's `useAuth` hook to get the current user's token:
+
+```typescript
+import { useAuth } from "@clerk/nextjs"
+
+function MyComponent() {
+  const { getToken, userId } = useAuth()
+  
+  async function makeAuthenticatedRequest() {
+    const token = await getToken()
+    
+    const response = await fetch("/api/projects/create-with-prompt", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        prompt: "Create a todo app",
+        source: "dashboard"
+      })
+    })
+    
+    return response.json()
+  }
+}
+```
+
+#### In Server Components
+
+Use Clerk's `auth()` helper in Next.js server components:
+
+```typescript
+import { auth } from "@clerk/nextjs/server"
+
+export default async function Page() {
+  const { userId, getToken } = await auth()
+  
+  if (!userId) {
+    return <div>Please sign in</div>
+  }
+  
+  const token = await getToken()
+  // Use token for authenticated requests
+}
+```
+
+#### In API Routes
+
+Access the authenticated user in API routes:
+
+```typescript app/api/example/route.ts
+import { auth } from "@clerk/nextjs/server"
+
+export async function POST(req: Request) {
+  const { userId } = await auth()
+  
+  if (!userId) {
+    return Response.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    )
+  }
+  
+  // Process authenticated request
+  return Response.json({ success: true })
+}
+```
+
+## Convex Authentication
+
+Convex integrates seamlessly with Clerk for authentication.
+
+### Configuration
+
+In your `convex/auth.config.ts`:
+
+```typescript convex/auth.config.ts
+export default {
+  providers: [
+    {
+      domain: process.env.CLERK_JWT_ISSUER_DOMAIN!,
+      applicationID: "convex",
+    },
+  ],
+}
+```
+
+### Using Auth in Convex Functions
+
+#### Queries
+
+```typescript convex/projects.ts
+import { query } from "./_generated/server"
+
+export const list = query({
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    
+    if (!identity) {
+      throw new Error("Unauthenticated")
+    }
+    
+    const userId = identity.subject
+    
+    return await ctx.db
+      .query("projects")
+      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
+      .collect()
+  },
+})
+```
+
+#### Mutations
+
+```typescript convex/projects.ts
+import { mutation } from "./_generated/server"
+import { v } from "convex/values"
+
+export const create = mutation({
+  args: {
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    
+    if (!identity) {
+      throw new Error("Unauthenticated")
+    }
+    
+    const userId = identity.subject
+    
+    const projectId = await ctx.db.insert("projects", {
+      name: args.name,
+      ownerId: userId,
+      updatedAt: Date.now(),
+    })
+    
+    return projectId
+  },
+})
+```
+
+### Getting User Information
+
+Clerk provides detailed user information through the identity object:
+
+```typescript
+const identity = await ctx.auth.getUserIdentity()
+
+if (identity) {
+  console.log("User ID:", identity.subject)
+  console.log("Email:", identity.email)
+  console.log("Name:", identity.name)
+  console.log("Token:", identity.tokenIdentifier)
+}
+```
+
+## OAuth for GitHub Export
+
+For GitHub export functionality, Rushed AI requests additional OAuth scopes from GitHub:
+
+### Scopes Required
+
+```
+repo  # Full control of private repositories
+```
+
+### Getting GitHub Token
+
+After the user connects their GitHub account, retrieve their OAuth token:
+
+```typescript
+import { auth, clerkClient } from "@clerk/nextjs/server"
+
+export async function GET() {
+  const { userId } = await auth()
+  
+  if (!userId) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  
+  const client = await clerkClient()
+  const tokens = await client.users.getUserOauthAccessToken(
+    userId,
+    "oauth_github"
+  )
+  
+  if (tokens.data.length === 0) {
+    return Response.json(
+      { error: "GitHub not connected" },
+      { status: 400 }
+    )
+  }
+  
+  const githubToken = tokens.data[0].token
+  
+  // Use token to interact with GitHub API
+}
+```
+
+<Warning>
+  The GitHub token is only available if the user has connected their GitHub account through Clerk's OAuth flow.
+</Warning>
+
+## Authorization
+
+Rushed AI implements resource-level authorization to ensure users can only access their own data.
+
+### Project Authorization
+
+```typescript
+export const getProject = query({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    
+    if (!identity) {
+      throw new Error("Unauthenticated")
+    }
+    
+    const project = await ctx.db.get(args.projectId)
+    
+    if (!project) {
+      throw new Error("Project not found")
+    }
+    
+    // Verify ownership
+    if (project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized")
+    }
+    
+    return project
+  },
+})
+```
+
+### File Authorization
+
+Files are authorized through their parent project:
+
+```typescript
+export const getFile = query({
+  args: { fileId: v.id("files") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    
+    if (!identity) {
+      throw new Error("Unauthenticated")
+    }
+    
+    const file = await ctx.db.get(args.fileId)
+    
+    if (!file) {
+      throw new Error("File not found")
+    }
+    
+    // Check project ownership
+    const project = await ctx.db.get(file.projectId)
+    
+    if (!project || project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized")
+    }
+    
+    return file
+  },
+})
+```
+
+## Error Handling
+
+### Common Authentication Errors
+
+<AccordionGroup>
+  <Accordion title="401 Unauthorized">
+    The request is missing authentication credentials or the token is invalid.
+    
+    **Solution**: Ensure the user is signed in and include a valid JWT token in the Authorization header.
+  </Accordion>
+  
+  <Accordion title="403 Forbidden">
+    The user is authenticated but doesn't have permission to access the resource.
+    
+    **Solution**: Verify the user owns the resource they're trying to access.
+  </Accordion>
+  
+  <Accordion title="Token Expired">
+    The JWT token has expired and needs to be refreshed.
+    
+    **Solution**: Clerk automatically handles token refresh. Call `getToken()` again to get a fresh token.
+  </Accordion>
+</AccordionGroup>
+
+### Example Error Handling
+
+```typescript
+import { useAuth } from "@clerk/nextjs"
+import { useState } from "react"
+
+function MyComponent() {
+  const { getToken } = useAuth()
+  const [error, setError] = useState<string | null>(null)
+  
+  async function makeRequest() {
+    try {
+      const token = await getToken()
+      
+      if (!token) {
+        setError("Please sign in to continue")
+        return
+      }
+      
+      const response = await fetch("/api/endpoint", {
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      })
+      
+      if (response.status === 401) {
+        setError("Authentication failed. Please sign in again.")
+        return
+      }
+      
+      if (response.status === 403) {
+        setError("You don't have permission to access this resource.")
+        return
+      }
+      
+      const data = await response.json()
+      // Handle success
+    } catch (err) {
+      setError("An error occurred. Please try again.")
+    }
+  }
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Always Validate" icon="shield-check">
+    Always validate authentication on the server. Never trust client-side authentication alone.
+  </Card>
+  
+  <Card title="Use HTTPS" icon="lock">
+    Always use HTTPS in production to protect tokens in transit.
+  </Card>
+  
+  <Card title="Token Refresh" icon="rotate">
+    Let Clerk handle token refresh automatically. Don't implement manual refresh logic.
+  </Card>
+  
+  <Card title="Scope Appropriately" icon="key">
+    Only request OAuth scopes you actually need (e.g., GitHub repo access only when required).
+  </Card>
+</CardGroup>
+
+## Testing Authentication
+
+### Development Mode
+
+In development, Clerk provides test users and accounts:
+
+```typescript
+// Access test mode in Clerk Dashboard
+// Create test users with various states:
+// - Active users
+// - Users without GitHub connected
+// - Users with expired tokens
+```
+
+### Manual Testing
+
+Test authentication flows manually:
+
+1. Sign up with a new account
+2. Sign in with existing credentials
+3. Test GitHub OAuth connection
+4. Verify token expiration handling
+5. Test unauthorized access attempts
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Overview" icon="book" href="/api/overview">
+    Learn about the Rushed AI API structure
+  </Card>
+  
+  <Card title="Projects API" icon="folder" href="/api/projects/create">
+    Create and manage projects
+  </Card>
+  
+  <Card title="Clerk Integration" icon="key" href="/integrations/clerk-auth">
+    Deep dive into Clerk integration
+  </Card>
+  
+  <Card title="Convex Backend" icon="database" href="/integrations/convex-backend">
+    Learn about Convex authentication
+  </Card>
+</CardGroup>

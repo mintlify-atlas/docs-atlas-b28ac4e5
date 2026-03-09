@@ -1,122 +1,119 @@
 {
   "$schema": "https://mintlify.com/docs.json",
+  "name": "Rushed AI",
   "theme": "mint",
-  "name": "Mint Starter Kit",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#d5392a",
+    "light": "#324f74",
+    "dark": "#d7e3ee"
   },
-  "favicon": "/favicon.svg",
+
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/brayanj4y/rushed-ai"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/brayanj4y/rushed-ai",
+      "x": "https://x.com/brayanj4y",
+      "linkedin": "https://www.linkedin.com/in/brayanj4y"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Features",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "features/ai-code-generation",
+              "features/browser-editor",
+              "features/project-management",
+              "features/live-preview"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Usage Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/creating-projects",
+              "guides/working-with-ai",
+              "guides/editing-code",
+              "guides/managing-files",
+              "guides/exporting-projects"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Integrations",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "integrations/github-export",
+              "integrations/clerk-auth",
+              "integrations/convex-backend"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Overview",
             "pages": [
-              "api-reference/introduction"
+              "api/overview",
+              "api/authentication"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Projects",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/projects/create",
+              "api/projects/list",
+              "api/projects/update"
+            ]
+          },
+          {
+            "group": "Files",
+            "pages": [
+              "api/files/list",
+              "api/files/read",
+              "api/files/create",
+              "api/files/update",
+              "api/files/delete"
+            ]
+          },
+          {
+            "group": "Conversations",
+            "pages": [
+              "api/conversations/create",
+              "api/conversations/list",
+              "api/conversations/messages"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Additional Info",
+            "pages": [
+              "resources/pricing",
+              "resources/credits",
+              "resources/faq",
+              "resources/contributing"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

@@ -1,0 +1,412 @@
+---
+title: "Update File"
+api: "PATCH /api/files/:id"
+description: "Modify file content and metadata"
+---
+
+## Overview
+
+The `updateFile` mutation modifies the content of an existing file in your project. This operation updates the file's content and automatically updates both the file's and project's `updatedAt` timestamps. Only files (not folders) can be updated with this endpoint.
+
+## Authentication
+
+Requires authentication via Convex auth. The authenticated user must own the project containing the file.
+
+## Request
+
+<ParamField body="id" type="string" required>
+  The unique identifier of the file to update. Must be a valid Convex ID for an existing file (not a folder).
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  The new content for the file. Completely replaces the existing content. Can be an empty string to clear the file.
+</ParamField>
+
+## Response
+
+Returns `void` on success. The file's `updatedAt` timestamp is automatically updated.
+
+## Code Examples
+
+<CodeGroup>
+
+```typescript TypeScript
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
+
+function CodeEditor({ fileId }: { fileId: Id<"files"> }) {
+  const updateFile = useMutation(api.files.updateFile);
+  const [content, setContent] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await updateFile({
+        id: fileId,
+        content
+      });
+      console.log("File saved successfully!");
+    } catch (error) {
+      console.error("Failed to save file:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  return (
+    <div>
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        rows={20}
+        cols={80}
+      />
+      <button onClick={handleSave} disabled={isSaving}>
+        {isSaving ? "Saving..." : "Save"}
+      </button>
+    </div>
+  );
+}
+```
+
+```javascript JavaScript
+// Update a single file
+await convex.mutation(api.files.updateFile, {
+  id: "k17file123",
+  content: "export const greeting = 'Hello, Updated World!';"
+});
+
+console.log("File updated successfully");
+
+// Update with multi-line content
+const newContent = `
+import React from 'react';
+
+export default function App() {
+  return (
+    <div>
+      <h1>Updated App</h1>
+      <p>This content was updated via API</p>
+    </div>
+  );
+}
+`.trim();
+
+await convex.mutation(api.files.updateFile, {
+  id: "k17file456",
+  content: newContent
+});
+```
+
+```python Python
+# Using Convex Python client
+client.mutation("files:updateFile", {
+    "id": "k17file123",
+    "content": "# Updated configuration\nDEBUG=true\nAPI_KEY=new_key"
+})
+
+print("File updated successfully")
+```
+
+```bash cURL
+curl -X POST https://your-app.convex.cloud/api/mutation \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "path": "files:updateFile",
+    "args": {
+      "id": "k17file123",
+      "content": "export const API_URL = '"'"'https://api.example.com'"'"';"
+    }
+  }'
+```
+
+</CodeGroup>
+
+## AI Agent Tool Integration
+
+The `updateFile` function is commonly used by AI agents through the Inngest tool pattern:
+
+```typescript
+import { createTool } from "@inngest/agent-kit";
+import { z } from "zod";
+
+export const createUpdateFileTool = ({ internalKey }) => {
+  return createTool({
+    name: "updateFile",
+    description: "Update the content of an existing file",
+    parameters: z.object({
+      fileId: z.string().describe("The ID of the file to update"),
+      content: z.string().describe("The new content for the file")
+    }),
+    handler: async ({ fileId, content }, { step }) => {
+      // Validate file exists and is not a folder
+      const file = await convex.query(api.system.getFileById, {
+        internalKey,
+        fileId
+      });
+      
+      if (!file) {
+        return `Error: File with ID "${fileId}" not found.`;
+      }
+      
+      if (file.type === "folder") {
+        return `Error: "${fileId}" is a folder, not a file.`;
+      }
+      
+      // Perform the update
+      await step.run("update-file", async () => {
+        await convex.mutation(api.system.updateFile, {
+          internalKey,
+          fileId,
+          content
+        });
+      });
+      
+      return `File "${file.name}" updated successfully`;
+    }
+  });
+};
+```
+
+## Auto-save Pattern
+
+Implement debounced auto-save for better UX:
+
+```typescript
+import { useEffect, useRef } from "react";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+
+function useAutoSave(
+  fileId: Id<"files">,
+  content: string,
+  delay: number = 1000
+) {
+  const updateFile = useMutation(api.files.updateFile);
+  const timeoutRef = useRef<NodeJS.Timeout>();
+  
+  useEffect(() => {
+    // Clear existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    
+    // Set new timeout
+    timeoutRef.current = setTimeout(() => {
+      updateFile({ id: fileId, content });
+    }, delay);
+    
+    // Cleanup
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [content, fileId, delay, updateFile]);
+}
+
+// Usage in component
+function Editor({ fileId, initialContent }) {
+  const [content, setContent] = useState(initialContent);
+  
+  // Auto-save after 1 second of inactivity
+  useAutoSave(fileId, content, 1000);
+  
+  return (
+    <textarea
+      value={content}
+      onChange={(e) => setContent(e.target.value)}
+    />
+  );
+}
+```
+
+## Batch Updates
+
+Update multiple files sequentially or in parallel:
+
+```typescript
+// Sequential updates (one after another)
+for (const { fileId, content } of updates) {
+  await convex.mutation(api.files.updateFile, {
+    id: fileId,
+    content
+  });
+}
+
+// Parallel updates (all at once)
+await Promise.all(
+  updates.map(({ fileId, content }) =>
+    convex.mutation(api.files.updateFile, {
+      id: fileId,
+      content
+    })
+  )
+);
+```
+
+## Rename File
+
+To rename a file without changing content, use the `renameFile` mutation:
+
+<ParamField body="id" type="string" required>
+  The file or folder ID
+</ParamField>
+
+<ParamField body="newName" type="string" required>
+  The new name (must be unique in the parent folder)
+</ParamField>
+
+### Example
+
+```typescript
+await convex.mutation(api.files.renameFile, {
+  id: "k17file123",
+  newName: "NewComponent.tsx"
+});
+```
+
+## Error Handling
+
+<ResponseField name="error" type="string">
+  Error message if the operation fails
+</ResponseField>
+
+### Common Errors
+
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| `"File not found"` | Invalid file ID or file was deleted | Verify the file exists using List Files |
+| `"Project not found"` | File's project no longer exists | Check project status |
+| `"Unauthorized to access this project"` | User doesn't own the project | Verify authentication and ownership |
+| `"Cannot update a folder"` | The ID refers to a folder, not a file | Only files can have content updated |
+
+### Error Handling Example
+
+```typescript
+try {
+  await convex.mutation(api.files.updateFile, {
+    id: fileId,
+    content: newContent
+  });
+} catch (error) {
+  if (error.message === "File not found") {
+    console.error("File was deleted or doesn't exist");
+    // Optionally create a new file
+  } else if (error.message.includes("folder")) {
+    console.error("Cannot update folder content");
+  } else {
+    console.error("Update failed:", error);
+  }
+}
+```
+
+## Timestamps
+
+When a file is updated:
+
+1. File's `updatedAt` is set to `Date.now()`
+2. Project's `updatedAt` is also updated
+3. These timestamps are used for:
+   - Sorting files by recency
+   - Tracking project activity
+   - Syncing and conflict resolution
+
+```typescript
+const file = await convex.query(api.files.getFile, { id: fileId });
+console.log(`Last updated: ${new Date(file.updatedAt).toLocaleString()}`);
+```
+
+## Content Validation
+
+### Size Limits
+
+While there's no enforced limit at the API level, consider:
+
+- Files over 1MB may be moved to blob storage
+- Very large updates may impact performance
+- Consider chunking large content updates
+
+### Format Validation
+
+```typescript
+// Validate JSON files before updating
+if (fileName.endsWith('.json')) {
+  try {
+    JSON.parse(content);
+    await updateFile({ id: fileId, content });
+  } catch (error) {
+    console.error("Invalid JSON:", error);
+  }
+}
+
+// Validate TypeScript syntax
+import * as ts from "typescript";
+
+const sourceFile = ts.createSourceFile(
+  fileName,
+  content,
+  ts.ScriptTarget.Latest,
+  true
+);
+
+if (sourceFile.parseDiagnostics?.length > 0) {
+  console.error("TypeScript syntax errors detected");
+} else {
+  await updateFile({ id: fileId, content });
+}
+```
+
+## Optimistic Updates
+
+For responsive UIs, implement optimistic updates:
+
+```typescript
+import { useOptimisticMutation } from "./hooks";
+
+function Editor({ file }) {
+  const [content, setContent] = useState(file.content);
+  const updateFile = useOptimisticMutation(api.files.updateFile);
+  
+  const handleSave = () => {
+    // Update UI immediately
+    setContent(newContent);
+    
+    // Send mutation in background
+    updateFile({ id: file._id, content: newContent })
+      .catch(() => {
+        // Revert on error
+        setContent(file.content);
+      });
+  };
+}
+```
+
+## Version Control Integration
+
+Track file changes for version control:
+
+```typescript
+// Store version history
+await convex.mutation(api.fileVersions.create, {
+  fileId,
+  content: previousContent,
+  timestamp: Date.now()
+});
+
+// Then update the file
+await convex.mutation(api.files.updateFile, {
+  id: fileId,
+  content: newContent
+});
+```
+
+## Related Endpoints
+
+- [Read File](/api/files/read) - Get current file content
+- [Create Files](/api/files/create) - Create new files
+- [Rename File](/api/files/update#rename-file) - Change file name
+- [List Files](/api/files/list) - View all project files

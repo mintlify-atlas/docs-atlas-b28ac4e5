@@ -1,0 +1,359 @@
+---
+title: Working with AI
+description: Master conversational AI development in Rushed AI to build features, refine code, and iterate quickly
+---
+
+## Overview
+
+Rushed AI's conversational interface lets you describe features, ask questions, and refine your application through natural language. The AI understands your project context, can reference specific files, and helps you build faster than traditional coding.
+
+## The Conversation Sidebar
+
+Every project includes a conversation sidebar on the right side of the workspace. This is your primary interface for AI interaction.
+
+<Note>
+  Conversations are project-specific. Each conversation maintains its own context and message history.
+</Note>
+
+## Starting Your First Conversation
+
+<Steps>
+  <Step title="Open the Conversation Sidebar">
+    The conversation sidebar is automatically visible in every project. If you created a project from a prompt, your first conversation is already active.
+  </Step>
+
+  <Step title="Type Your Message">
+    Click in the prompt input area at the bottom and describe what you want to build or change:
+    - "Add a login form with email and password fields"
+    - "Create a navigation bar with dark mode toggle"
+    - "Fix the styling on the hero section"
+    - "Refactor this component to use TypeScript"
+  </Step>
+
+  <Step title="Send and Wait">
+    Press Enter or click the send button. The AI will:
+    - Show a "Working..." status with a loading spinner
+    - Process your request in the background
+    - Generate or modify code files
+    - Respond with a summary of changes made
+
+    <Tip>
+      You can send multiple messages in sequence. The AI maintains context from previous messages in the conversation.
+    </Tip>
+  </Step>
+
+  <Step title="Review Changes">
+    Check the file explorer to see which files were created or modified. Open files in the editor to review the generated code.
+  </Step>
+</Steps>
+
+## Tagging Files with @
+
+One of Rushed AI's most powerful features is the ability to reference specific files in your prompts using the `@` symbol.
+
+### How File Tagging Works
+
+<Steps>
+  <Step title="Type @ in the Input">
+    When you type `@` in the conversation input, a file picker appears showing all files in your project.
+  </Step>
+
+  <Step title="Search and Select">
+    Start typing to filter files by name or path. Use arrow keys or click to select the file you want to reference.
+
+    ```text
+    @src/components/Button.tsx
+    ```
+  </Step>
+
+  <Step title="Add Context">
+    After selecting a file, describe what you want to do with it:
+    ```text
+    @src/components/Button.tsx Make this button accept a variant prop (primary, secondary, outline) and style accordingly
+    ```
+  </Step>
+</Steps>
+
+### Tagging Multiple Files
+
+You can reference multiple files in a single message:
+
+```text
+@src/components/Header.tsx @src/styles/globals.css
+Make the header sticky and update the global styles to support it
+```
+
+<Warning>
+  File tags must use the full file path, not just the filename. The autocomplete helps ensure you select the correct file.
+</Warning>
+
+### Implementation Details
+
+When you tag a file, Rushed AI:
+
+```typescript
+// Converts your tags to markdown format for the backend
+const fileTags = message.files
+  .filter(f => f.type === "file")
+  .map(f => `**@${f.filename}**`)
+  .join(" ");
+
+const fullMessage = fileTags
+  ? `${fileTags}\n\n${message.text}`
+  : message.text;
+```
+
+This ensures the AI knows exactly which files to focus on.
+
+## Adding Code Selections to Chat
+
+Beyond file tagging, you can add specific code selections from the editor directly to the conversation.
+
+<Steps>
+  <Step title="Select Code in the Editor">
+    Highlight the code you want to discuss or modify in the CodeMirror editor.
+  </Step>
+
+  <Step title="Use the Selection Tooltip">
+    A tooltip appears above your selection with an "Add to Chat" option. Click it.
+  </Step>
+
+  <Step title="Review in Conversation">
+    The selected code is automatically added to your conversation input as a formatted code block:
+    ```text
+    **@Button.tsx**
+
+    function Button({ children }) {
+      return <button>{children}</button>
+    }
+    ```
+  </Step>
+
+  <Step title="Add Instructions">
+    Add your instructions below the code block and send the message.
+  </Step>
+</Steps>
+
+<Tip>
+  This feature is perfect for asking questions about specific code sections or requesting targeted refactors.
+</Tip>
+
+## Managing Conversations
+
+### Creating New Conversations
+
+Click the "+" button in the conversation header to start a fresh conversation. This is useful when:
+- Starting work on a completely different feature
+- You want to reset context
+- The conversation history is getting too long
+
+```typescript
+// New conversations get default titles
+const newConversationId = await createConversation({
+  projectId,
+  title: DEFAULT_CONVERSATION_TITLE,
+});
+```
+
+### Viewing Past Conversations
+
+Click the clock icon in the conversation header to open the conversation history dialog. You can:
+- Browse all conversations for the current project
+- Switch between conversations
+- See when each conversation was last updated
+
+### Conversation Context
+
+Each conversation maintains its own context:
+- Message history
+- Referenced files
+- Previous changes and discussions
+
+Switching conversations doesn't affect your files, only the AI's context for future messages.
+
+## Cancelling Requests
+
+If the AI is processing a request and you want to stop it:
+
+<Steps>
+  <Step title="Click the Stop Button">
+    The send button changes to a stop button (square icon) while processing.
+  </Step>
+
+  <Step title="Request Cancellation">
+    Clicking stop sends a cancellation request:
+    ```typescript
+    await ky.post("/api/messages/cancel", {
+      json: { projectId, source: "conversation_sidebar" },
+    });
+    ```
+  </Step>
+
+  <Step title="Status Updates">
+    The message status changes to "cancelled" and displays:
+    ```text
+    Request cancelled
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  Cancellation may take a moment. The AI completes its current operation before stopping.
+</Note>
+
+## Message Statuses
+
+Messages display different statuses during their lifecycle:
+
+<Tabs>
+  <Tab title="Processing">
+    <div className="flex items-center gap-2">
+      <span className="text-muted-foreground">Working...</span>
+    </div>
+    
+    The AI is actively processing your request. Files may be created or modified during this time.
+  </Tab>
+
+  <Tab title="Completed">
+    The AI has finished processing and displays the response message. You can copy the response using the copy button.
+  </Tab>
+
+  <Tab title="Cancelled">
+    <span className="italic text-muted-foreground">Request cancelled</span>
+    
+    You or the system cancelled the request before completion.
+  </Tab>
+
+  <Tab title="Failed">
+    An error occurred during processing. The error message helps identify the issue (e.g., insufficient credits, invalid request).
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+### Writing Effective Prompts
+
+<Card title="Be Specific" icon="target">
+  Instead of "add a button", say "add a primary button with rounded corners, blue background, and white text that says 'Get Started'"
+</Card>
+
+<Card title="Reference Files" icon="at">
+  Use `@` to tag files when you want to modify existing code: "@src/components/Nav.tsx add a mobile menu"
+</Card>
+
+<Card title="Break Down Complex Tasks" icon="list">
+  Don't ask for everything at once. Build features incrementally:
+  1. "Create a basic user profile page"
+  2. "Add an avatar upload to the profile page"
+  3. "Add profile editing functionality"
+</Card>
+
+<Card title="Provide Context" icon="info">
+  Mention your stack, design preferences, or constraints: "Using React and Tailwind, create a dashboard with a sidebar navigation"
+</Card>
+
+### Iterating on Features
+
+Rushed AI excels at iterative development:
+
+```text
+You: Create a contact form with name, email, and message fields
+AI: [Creates form component]
+
+You: Add validation to the form
+AI: [Adds validation logic]
+
+You: Style it to match the rest of the site with a gradient background
+AI: [Updates styling]
+
+You: Make it responsive for mobile
+AI: [Adds responsive breakpoints]
+```
+
+### When to Start a New Conversation
+
+Start a new conversation when:
+- ✅ Beginning a completely new feature unrelated to previous work
+- ✅ The conversation has 20+ messages and feels cluttered
+- ✅ You want to experiment with a different approach
+- ✅ Previous context is no longer relevant
+
+Keep the same conversation when:
+- ❌ Iterating on the same feature
+- ❌ Making related changes across multiple files
+- ❌ The AI needs context from previous messages
+
+## Credit Usage
+
+Every message you send to the AI consumes credits based on:
+- Length of your message
+- Number of files tagged with `@`
+- Complexity of code generation required
+- Amount of code in the response
+
+<Tabs>
+  <Tab title="Free Tier">
+    Limited credits per month. You'll see a warning when running low.
+    
+    **Best for:**
+    - Trying out Rushed AI
+    - Small projects
+    - Learning the platform
+  </Tab>
+
+  <Tab title="Pro Plan">
+    Unlimited credits for conversational AI.
+    
+    **Best for:**
+    - Active development
+    - Multiple projects
+    - Professional use
+  </Tab>
+</Tabs>
+
+<Warning>
+  If you run out of credits, you'll see an error with options to upgrade or purchase more credits.
+</Warning>
+
+## Troubleshooting
+
+### AI Doesn't Understand My Request
+
+Try:
+1. Being more specific about what you want
+2. Using `@` to tag the files you want modified
+3. Breaking your request into smaller steps
+4. Providing examples or references
+
+### AI Modifies Wrong Files
+
+Prevent this by:
+1. Always using `@` to tag files explicitly
+2. Being specific about file paths
+3. Reviewing changes immediately and asking for corrections
+
+### Changes Don't Appear in Preview
+
+Check:
+1. The files were actually modified (check timestamps)
+2. Your dev server is running
+3. The preview is showing the correct URL
+4. Hard refresh the preview (Cmd/Ctrl + Shift + R)
+
+### "Request Cancelled" Without Clicking Stop
+
+This happens when:
+1. You send a new message before the previous one finishes
+2. The system automatically cancels the old request
+3. This is normal behavior to prevent conflicts
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Editing Code" icon="code" href="/guides/editing-code">
+    Learn to use the code editor for manual changes
+  </Card>
+  <Card title="Managing Files" icon="folder" href="/guides/managing-files">
+    Organize your project structure effectively
+  </Card>
+</CardGroup>

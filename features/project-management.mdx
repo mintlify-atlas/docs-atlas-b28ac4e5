@@ -1,0 +1,614 @@
+---
+title: Project Management
+description: Create, organize, and manage projects with files, folders, and settings stored in Convex
+icon: folder-tree
+---
+
+## Overview
+
+Rushed AI provides comprehensive project management capabilities, allowing you to create projects, organize files and folders, and configure project-specific settings. All data is stored in **Convex**, a real-time backend that keeps your UI in sync automatically.
+
+<Note>
+Every operation includes authentication checks to ensure users can only access and modify their own projects.
+</Note>
+
+## Project Structure
+
+Projects in Rushed AI consist of:
+
+<CardGroup cols={3}>
+  <Card title="Metadata" icon="info-circle">
+    Project name, owner ID, creation timestamp, and last updated time.
+  </Card>
+  
+  <Card title="Files & Folders" icon="folder-open">
+    Hierarchical file system with support for nested folders and text/binary files.
+  </Card>
+  
+  <Card title="Settings" icon="gear">
+    Configurable install and dev commands for the preview environment.
+  </Card>
+</CardGroup>
+
+## Core Operations
+
+### Creating Projects
+
+```typescript
+export const create = mutation({
+  args: {
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+
+    const projectId = await ctx.db.insert("projects", {
+      name: args.name,
+      ownerId: identity.subject,
+      updatedAt: Date.now(),
+    });
+
+    return projectId;
+  },
+});
+```
+
+<Steps>
+  <Step title="Authentication">
+    Verifies the user is logged in and retrieves their identity.
+  </Step>
+  
+  <Step title="Create Record">
+    Inserts a new project document with name, owner ID, and timestamp.
+  </Step>
+  
+  <Step title="Return ID">
+    Returns the new project ID for immediate navigation.
+  </Step>
+</Steps>
+
+### Listing Projects
+
+Projects are queried by owner and sorted by last updated:
+
+```typescript
+export const get = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await verifyAuth(ctx);
+
+    return await ctx.db
+      .query("projects")
+      .withIndex("by_owner", (q) => q.eq("ownerId", identity.subject))
+      .order("desc")
+      .collect();
+  },
+});
+```
+
+<Tip>
+The `by_owner` index ensures fast queries even with millions of projects in the database.
+</Tip>
+
+### Renaming Projects
+
+```typescript
+export const rename = mutation({
+  args: {
+    id: v.id("projects"),
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+    const project = await ctx.db.get(args.id);
+
+    if (!project) {
+      throw new Error("Project not found");
+    }
+
+    if (project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized access to this project");
+    }
+
+    await ctx.db.patch(args.id, {
+      name: args.name,
+      updatedAt: Date.now(),
+    });
+  },
+});
+```
+
+### Deleting Projects
+
+Deletion cascades to remove all associated data:
+
+```typescript
+export const deleteProject = mutation({
+  args: { id: v.id("projects") },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+    const project = await ctx.db.get(args.id);
+
+    if (!project) throw new Error("Project not found");
+    if (project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized access to this project");
+    }
+
+    // Delete all files
+    const files = await ctx.db
+      .query("files")
+      .withIndex("by_project", (q) => q.eq("projectId", args.id))
+      .collect();
+    for (const file of files) {
+      await ctx.db.delete(file._id);
+    }
+
+    // Delete all conversations
+    const conversations = await ctx.db
+      .query("conversations")
+      .withIndex("by_project", (q) => q.eq("projectId", args.id))
+      .collect();
+    for (const conversation of conversations) {
+      await ctx.db.delete(conversation._id);
+    }
+
+    // Delete all messages
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_project_status", (q) => q.eq("projectId", args.id))
+      .collect();
+    for (const message of messages) {
+      await ctx.db.delete(message._id);
+    }
+
+    // Delete the project
+    await ctx.db.delete(args.id);
+  },
+});
+```
+
+<Accordion title="What Gets Deleted">
+When you delete a project, the following are permanently removed:
+- All files and folders in the project
+- All conversations associated with the project
+- All messages in those conversations
+- The project record itself
+- Binary file data from Convex storage (if applicable)
+</Accordion>
+
+## File System Operations
+
+### File & Folder Structure
+
+Files are stored with the following schema:
+
+```typescript
+interface File {
+  _id: Id<"files">;
+  projectId: Id<"projects">;
+  name: string;
+  type: "file" | "folder";
+  content?: string;          // Text content (undefined for folders)
+  storageId?: Id<"_storage">;  // Binary file reference
+  parentId?: Id<"files">;    // Parent folder (undefined for root)
+  updatedAt: number;
+}
+```
+
+### Creating Files
+
+```typescript
+export const createFile = mutation({
+  args: {
+    projectId: v.id("projects"),
+    parentId: v.optional(v.id("files")),
+    name: v.string(),
+    content: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+    const project = await ctx.db.get("projects", args.projectId);
+
+    if (!project || project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized");
+    }
+
+    // Check for duplicate names
+    const files = await ctx.db
+      .query("files")
+      .withIndex("by_project_parent", (q) =>
+        q.eq("projectId", args.projectId).eq("parentId", args.parentId)
+      )
+      .collect();
+
+    const existing = files.find(
+      (file) => file.name === args.name && file.type === "file"
+    );
+
+    if (existing) throw new Error("File already exists");
+
+    const now = Date.now();
+    await ctx.db.insert("files", {
+      projectId: args.projectId,
+      name: args.name,
+      content: args.content,
+      type: "file",
+      parentId: args.parentId,
+      updatedAt: now,
+    });
+
+    // Update project timestamp
+    await ctx.db.patch("projects", args.projectId, { updatedAt: now });
+  },
+});
+```
+
+<Note>
+Duplicate file names in the same folder are prevented at the database level.
+</Note>
+
+### Creating Folders
+
+```typescript
+export const createFolder = mutation({
+  args: {
+    projectId: v.id("projects"),
+    parentId: v.optional(v.id("files")),
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+    const project = await ctx.db.get("projects", args.projectId);
+
+    if (!project || project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized");
+    }
+
+    // Check for duplicate folder names
+    const files = await ctx.db
+      .query("files")
+      .withIndex("by_project_parent", (q) =>
+        q.eq("projectId", args.projectId).eq("parentId", args.parentId)
+      )
+      .collect();
+
+    const existing = files.find(
+      (file) => file.name === args.name && file.type === "folder"
+    );
+
+    if (existing) throw new Error("Folder already exists");
+
+    const now = Date.now();
+    await ctx.db.insert("files", {
+      projectId: args.projectId,
+      name: args.name,
+      type: "folder",
+      parentId: args.parentId,
+      updatedAt: now,
+    });
+
+    await ctx.db.patch("projects", args.projectId, { updatedAt: now });
+  },
+});
+```
+
+### Listing Folder Contents
+
+```typescript
+export const getFolderContents = query({
+  args: {
+    projectId: v.id("projects"),
+    parentId: v.optional(v.id("files")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+    const project = await ctx.db.get("projects", args.projectId);
+
+    if (!project || project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized");
+    }
+
+    const files = await ctx.db
+      .query("files")
+      .withIndex("by_project_parent", (q) =>
+        q.eq("projectId", args.projectId).eq("parentId", args.parentId)
+      )
+      .collect();
+
+    // Sort: folders first, then files, alphabetically
+    return files.sort((a, b) => {
+      if (a.type === "folder" && b.type === "file") return -1;
+      if (a.type === "file" && b.type === "folder") return 1;
+      return a.name.localeCompare(b.name);
+    });
+  },
+});
+```
+
+<Tip>
+Folders are always displayed before files, with both groups sorted alphabetically.
+</Tip>
+
+### Updating Files
+
+```typescript
+export const updateFile = mutation({
+  args: {
+    id: v.id("files"),
+    content: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+    const file = await ctx.db.get("files", args.id);
+
+    if (!file) throw new Error("File not found");
+
+    const project = await ctx.db.get("projects", file.projectId);
+    if (!project || project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch("files", args.id, {
+      content: args.content,
+      updatedAt: now,
+    });
+
+    await ctx.db.patch("projects", file.projectId, { updatedAt: now });
+  },
+});
+```
+
+### Renaming Files & Folders
+
+```typescript
+export const renameFile = mutation({
+  args: {
+    id: v.id("files"),
+    newName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+    const file = await ctx.db.get("files", args.id);
+
+    if (!file) throw new Error("File not found");
+
+    const project = await ctx.db.get("projects", file.projectId);
+    if (!project || project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized");
+    }
+
+    // Check for naming conflicts
+    const siblings = await ctx.db
+      .query("files")
+      .withIndex("by_project_parent", (q) =>
+        q.eq("projectId", file.projectId).eq("parentId", file.parentId)
+      )
+      .collect();
+
+    const existing = siblings.find(
+      (sibling) =>
+        sibling.name === args.newName &&
+        sibling.type === file.type &&
+        sibling._id !== args.id
+    );
+
+    if (existing) {
+      throw new Error(
+        `A ${file.type} with this name already exists in this location`
+      );
+    }
+
+    const now = Date.now();
+    await ctx.db.patch("files", args.id, {
+      name: args.newName,
+      updatedAt: now,
+    });
+
+    await ctx.db.patch("projects", file.projectId, { updatedAt: now });
+  }
+});
+```
+
+### Deleting Files & Folders
+
+Deletion is recursive for folders:
+
+```typescript
+export const deleteFile = mutation({
+  args: { id: v.id("files") },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+    const file = await ctx.db.get("files", args.id);
+
+    if (!file) throw new Error("File not found");
+
+    const project = await ctx.db.get("projects", file.projectId);
+    if (!project || project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized");
+    }
+
+    // Recursive deletion function
+    const deleteRecursive = async (fileId: Id<"files">) => {
+      const item = await ctx.db.get("files", fileId);
+      if (!item) return;
+
+      // If folder, delete all children first
+      if (item.type === "folder") {
+        const children = await ctx.db
+          .query("files")
+          .withIndex("by_project_parent", (q) =>
+            q.eq("projectId", item.projectId).eq("parentId", fileId)
+          )
+          .collect();
+
+        for (const child of children) {
+          await deleteRecursive(child._id);
+        }
+      }
+
+      // Delete storage file if it exists
+      if (item.storageId) {
+        await ctx.storage.delete(item.storageId);
+      }
+
+      // Delete the file/folder itself
+      await ctx.db.delete("files", fileId);
+    };
+
+    await deleteRecursive(args.id);
+    await ctx.db.patch("projects", file.projectId, { updatedAt: Date.now() });
+  }
+});
+```
+
+<Accordion title="Deletion Behavior">
+- **Files**: Deleted immediately, including binary storage if present
+- **Folders**: Recursively deletes all children before deleting the folder
+- **Storage**: Binary files in Convex storage are also removed
+- **Timestamp**: Project `updatedAt` is updated after deletion
+</Accordion>
+
+## File Path Resolution
+
+Get the full path to a file by traversing parent relationships:
+
+```typescript
+export const getFilePath = query({
+  args: { id: v.id("files") },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+    const file = await ctx.db.get("files", args.id);
+
+    if (!file) throw new Error("File not found");
+
+    const project = await ctx.db.get("projects", file.projectId);
+    if (!project || project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized");
+    }
+
+    const path: { _id: string; name: string }[] = [];
+    let currentId: Id<"files"> | undefined = args.id;
+
+    while (currentId) {
+      const file = await ctx.db.get("files", currentId);
+      if (!file) break;
+
+      path.unshift({ _id: file._id, name: file.name });
+      currentId = file.parentId;
+    }
+
+    return path;
+  },
+});
+```
+
+**Example Output**:
+```javascript
+[
+  { _id: "abc123", name: "src" },
+  { _id: "def456", name: "components" },
+  { _id: "ghi789", name: "button.tsx" }
+]
+// Renders as: src > components > button.tsx
+```
+
+## Project Settings
+
+Configure build and dev commands:
+
+```typescript
+export const updateSettings = mutation({
+  args: {
+    id: v.id("projects"),
+    settings: v.object({
+      installCommand: v.optional(v.string()),
+      devCommand: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+    const project = await ctx.db.get(args.id);
+
+    if (!project || project.ownerId !== identity.subject) {
+      throw new Error("Unauthorized");
+    }
+
+    await ctx.db.patch(args.id, {
+      settings: args.settings,
+      updatedAt: Date.now(),
+    });
+  },
+});
+```
+
+<CardGroup cols={2}>
+  <Card title="Install Command" icon="download">
+    Command to install dependencies (default: `npm install`). Used when booting the WebContainer.
+  </Card>
+  
+  <Card title="Dev Command" icon="terminal">
+    Command to start the development server (default: `npm run dev`). Runs after installation completes.
+  </Card>
+</CardGroup>
+
+## Real-time Synchronization
+
+Convex provides automatic real-time updates:
+
+```tsx
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ProjectsList() {
+  // Automatically re-renders when projects change
+  const projects = useQuery(api.projects.get);
+  
+  return (
+    <div>
+      {projects?.map((project) => (
+        <div key={project._id}>{project.name}</div>
+      ))}
+    </div>
+  );
+}
+```
+
+<Tip>
+When any user creates, updates, or deletes a project, all connected clients receive the update instantly without polling.
+</Tip>
+
+## Authorization & Security
+
+Every operation includes multi-layer security:
+
+<Steps>
+  <Step title="Authentication">
+    `verifyAuth(ctx)` ensures the user is logged in and retrieves their identity.
+  </Step>
+  
+  <Step title="Ownership Check">
+    Verifies `project.ownerId === identity.subject` before allowing any operation.
+  </Step>
+  
+  <Step title="Error Handling">
+    Throws descriptive errors for unauthorized access, missing resources, or validation failures.
+  </Step>
+</Steps>
+
+```typescript
+const identity = await verifyAuth(ctx);
+const project = await ctx.db.get(args.projectId);
+
+if (!project) {
+  throw new Error("Project not found");
+}
+
+if (project.ownerId !== identity.subject) {
+  throw new Error("Unauthorized access to this project");
+}
+```
+
+<Note>
+Users can **only** view and modify their own projects. Cross-user access is completely prevented at the database query level.
+</Note>

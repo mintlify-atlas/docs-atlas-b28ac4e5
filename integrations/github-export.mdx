@@ -1,0 +1,285 @@
+---
+title: GitHub Export Integration
+description: Export your Rushed AI projects to GitHub repositories using the Octokit API
+icon: github
+---
+
+## Overview
+
+Rushed AI integrates with GitHub to enable seamless export of your projects to GitHub repositories. This integration uses the **Octokit** SDK and GitHub's OAuth authentication through Clerk to create repositories and push your project files directly to GitHub.
+
+<Note>
+  GitHub export is a Pro plan feature. Users must have an active Pro or Scale subscription to export projects.
+</Note>
+
+## How It Works
+
+The GitHub export process follows these steps:
+
+<Steps>
+  <Step title="Initiate Export Request">
+    Users trigger an export from the project toolbar, providing repository name, visibility, and optional description.
+  </Step>
+  
+  <Step title="Credit Check">
+    The system verifies the user has an active Pro plan subscription before proceeding.
+  </Step>
+  
+  <Step title="Background Processing">
+    An Inngest function handles the export asynchronously, creating the repository and pushing all project files.
+  </Step>
+  
+  <Step title="Repository Creation">
+    A new GitHub repository is created using the Octokit API with the specified visibility settings.
+  </Step>
+  
+  <Step title="File Export">
+    All project files (both text and binary) are converted to Git blobs and committed to the repository.
+  </Step>
+</Steps>
+
+## API Endpoints
+
+### Export Project to GitHub
+
+Initiates the export process for a project.
+
+**Endpoint:** `POST /api/github/export`
+
+**Request Body:**
+
+<CodeGroup>
+```typescript TypeScript
+interface ExportRequest {
+  projectId: string;
+  repoName: string;
+  visibility: "public" | "private";
+  description?: string;
+  source?: "project_toolbar";
+}
+```
+
+```json JSON Example
+{
+  "projectId": "k123abc456def789",
+  "repoName": "my-rushed-project",
+  "visibility": "private",
+  "description": "My awesome project built with Rushed AI"
+}
+```
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "projectId": "k123abc456def789",
+  "eventId": "01HPQR5STUVWXYZ"
+}
+```
+
+### Cancel Export
+
+**Endpoint:** `POST /api/github/export/cancel`
+
+Cancels an in-progress export operation.
+
+### Reset Export Status
+
+**Endpoint:** `POST /api/github/export/reset`
+
+Resets the export status for a project, allowing re-export.
+
+## Implementation Details
+
+### Authentication Flow
+
+The integration retrieves the user's GitHub OAuth token through Clerk:
+
+```typescript
+import { createClerkClient } from "@clerk/backend";
+
+const clerkClient = createClerkClient({ 
+  secretKey: process.env.CLERK_SECRET_KEY 
+});
+
+const tokens = await clerkClient.users.getUserOauthAccessToken(
+  userId, 
+  "github"
+);
+const githubToken = tokens.data[0]?.token;
+```
+
+This token is then used to authenticate with the Octokit client:
+
+```typescript
+import { Octokit } from "octokit";
+
+const octokit = new Octokit({ auth: githubToken });
+```
+
+### Repository Creation
+
+The export process creates a new repository with automatic initialization:
+
+```typescript
+const { data: repo } = await octokit.rest.repos.createForAuthenticatedUser({
+  name: repoName,
+  description: description || "Exported from Rushed",
+  private: visibility === "private",
+  auto_init: true,
+});
+```
+
+### File Export Process
+
+Files are exported using GitHub's Git Data API:
+
+<Steps>
+  <Step title="Create Blobs">
+    Each file is converted to a Git blob. Text files are encoded as UTF-8, while binary files (images, etc.) are base64-encoded.
+    
+    ```typescript
+    const { data: blob } = await octokit.rest.git.createBlob({
+      owner: user.login,
+      repo: repoName,
+      content: content,
+      encoding: isBinary ? "base64" : "utf-8",
+    });
+    ```
+  </Step>
+  
+  <Step title="Create Tree">
+    All blobs are assembled into a Git tree representing the file structure.
+    
+    ```typescript
+    const { data: tree } = await octokit.rest.git.createTree({
+      owner: user.login,
+      repo: repoName,
+      tree: treeItems, // Array of { path, mode, type, sha }
+    });
+    ```
+  </Step>
+  
+  <Step title="Create Commit">
+    A commit is created with the tree, replacing the initial commit.
+    
+    ```typescript
+    const { data: commit } = await octokit.rest.git.createCommit({
+      owner: user.login,
+      repo: repoName,
+      message: "Initial commit from Rushed",
+      tree: tree.sha,
+      parents: [initialCommitSha],
+    });
+    ```
+  </Step>
+  
+  <Step title="Update Branch">
+    The main branch reference is updated to point to the new commit.
+    
+    ```typescript
+    await octokit.rest.git.updateRef({
+      owner: user.login,
+      repo: repoName,
+      ref: "heads/main",
+      sha: commit.sha,
+      force: true,
+    });
+    ```
+  </Step>
+</Steps>
+
+## Environment Variables
+
+Required environment variables for GitHub export:
+
+```bash
+# Clerk Authentication
+CLERK_SECRET_KEY=sk_test_...
+
+# Convex Internal Authentication
+RUSHED_CONVEX_INTERNAL_KEY=<base64-encoded-key>
+
+# Convex Deployment
+NEXT_PUBLIC_CONVEX_URL=https://your-deployment.convex.cloud
+```
+
+<Info>
+  Generate the `RUSHED_CONVEX_INTERNAL_KEY` with:
+  ```bash
+  node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+  ```
+</Info>
+
+## Export Status Tracking
+
+Projects track their export status in the Convex database:
+
+```typescript
+interface Project {
+  exportStatus?: "exporting" | "completed" | "failed" | "cancelled";
+  exportRepoUrl?: string;
+  // ... other fields
+}
+```
+
+Status updates occur at each stage of the export process:
+
+- **exporting**: Export initiated and in progress
+- **completed**: Successfully exported, includes `exportRepoUrl`
+- **failed**: Export encountered an error
+- **cancelled**: User cancelled the export
+
+## Error Handling
+
+The export process includes comprehensive error handling:
+
+<CardGroup cols={2}>
+  <Card title="Authentication Errors" icon="key">
+    If the GitHub token is missing or invalid, users are prompted to reconnect their GitHub account.
+  </Card>
+  
+  <Card title="Credit Check Failures" icon="credit-card">
+    Users without Pro plans receive a 403 error with upgrade prompts.
+  </Card>
+  
+  <Card title="Repository Conflicts" icon="exclamation-triangle">
+    If a repository with the same name exists, GitHub returns a conflict error.
+  </Card>
+  
+  <Card title="File Processing Errors" icon="file-slash">
+    Individual file failures are logged but don't halt the entire export.
+  </Card>
+</CardGroup>
+
+When an export fails, the status is automatically set to `"failed"` through the Inngest `onFailure` handler:
+
+```typescript
+export const exportToGithub = inngest.createFunction(
+  {
+    id: "export-to-github",
+    cancelOn: [{
+      event: "github/export.cancel",
+      if: "event.data.projectId == async.data.projectId"
+    }],
+    onFailure: async ({ event, step }) => {
+      await convex.mutation(api.system.updateExportStatus, {
+        internalKey,
+        projectId,
+        status: "failed",
+      });
+    }
+  },
+  // ... handler
+);
+```
+
+## File Source: `src/app/api/github/export/route.ts`
+
+The export endpoint handles request validation, credit checks, and Inngest event triggering.
+
+## Background Job: `src/features/projects/inngest/export-to-github.ts`
+
+The Inngest function orchestrates the entire export workflow with automatic retries and failure handling.

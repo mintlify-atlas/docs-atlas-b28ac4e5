@@ -1,0 +1,316 @@
+---
+title: 'List Projects'
+api: 'GET /api/projects (via Convex)'
+description: 'Retrieve all projects owned by the authenticated user'
+---
+
+This endpoint retrieves all projects belonging to the authenticated user, ordered by most recently updated first. Projects are accessed via Convex queries rather than traditional REST endpoints.
+
+## Authentication
+
+Requires a valid Clerk authentication session. The query automatically filters results to only include projects owned by the authenticated user.
+
+## Convex Query
+
+Use the `api.projects.get` Convex query to retrieve projects:
+
+```typescript
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+const projects = useQuery(api.projects.get);
+```
+
+## Query Variants
+
+### Get All Projects
+
+<ParamField query="(none)" type="void">
+  The base query takes no parameters and returns all projects.
+</ParamField>
+
+### Get Partial Projects (Paginated)
+
+For better performance when displaying project lists, use `getPartial` to limit results:
+
+<ParamField query="limit" type="number" required>
+  Maximum number of projects to return. Used for pagination and performance optimization.
+  
+  **Example:** `10` returns the 10 most recently updated projects
+</ParamField>
+
+### Get Single Project by ID
+
+Retrieve a specific project by its ID:
+
+<ParamField query="id" type="string" required>
+  The Convex ID of the project to retrieve.
+  
+  **Format:** Convex ID string (e.g., `"jd7x8k9m2n5p6q8r"`)
+</ParamField>
+
+## Response
+
+Returns an array of project objects, ordered by `updatedAt` in descending order (most recent first).
+
+<ResponseField name="_id" type="string" required>
+  The unique Convex identifier for the project.
+</ResponseField>
+
+<ResponseField name="_creationTime" type="number" required>
+  Unix timestamp (in milliseconds) when the project was created.
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  The display name of the project. Auto-generated names follow the pattern `adjective-animal-color`.
+  
+  **Example:** `"happy-dolphin-blue"`
+</ResponseField>
+
+<ResponseField name="ownerId" type="string" required>
+  The Clerk user ID of the project owner. Always matches the authenticated user's ID for returned projects.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="number" required>
+  Unix timestamp (in milliseconds) when the project was last modified.
+</ResponseField>
+
+<ResponseField name="importStatus" type="string">
+  Status of GitHub import operation if the project was imported from a repository.
+  
+  **Possible values:**
+  - `importing` - Import in progress
+  - `completed` - Import finished successfully
+  - `failed` - Import encountered an error
+</ResponseField>
+
+<ResponseField name="exportStatus" type="string">
+  Status of GitHub export operation if the project has been exported to a repository.
+  
+  **Possible values:**
+  - `exporting` - Export in progress
+  - `completed` - Export finished successfully  
+  - `failed` - Export encountered an error
+  - `cancelled` - Export was cancelled by user
+</ResponseField>
+
+<ResponseField name="exportRepoUrl" type="string">
+  The GitHub repository URL where the project was exported, if applicable.
+  
+  **Example:** `"https://github.com/username/repo-name"`
+</ResponseField>
+
+<ResponseField name="settings" type="object">
+  Custom project settings for build and development commands.
+  
+  <Expandable title="Settings Object">
+    <ResponseField name="installCommand" type="string">
+      Command to install project dependencies.
+      
+      **Examples:** `"npm install"`, `"yarn"`, `"pnpm install"`
+    </ResponseField>
+    
+    <ResponseField name="devCommand" type="string">
+      Command to start the development server.
+      
+      **Examples:** `"npm run dev"`, `"yarn dev"`, `"vite"`
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Usage
+
+<CodeGroup>
+```typescript React Hook
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ProjectsList() {
+  // Get all projects
+  const projects = useQuery(api.projects.get);
+  
+  if (projects === undefined) {
+    return <div>Loading...</div>;
+  }
+  
+  return (
+    <ul>
+      {projects.map(project => (
+        <li key={project._id}>
+          {project.name} - Updated {new Date(project.updatedAt).toLocaleDateString()}
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+```typescript Paginated List
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function RecentProjects() {
+  // Get only the 10 most recent projects
+  const recentProjects = useQuery(api.projects.getPartial, { limit: 10 });
+  
+  if (recentProjects === undefined) {
+    return <div>Loading...</div>;
+  }
+  
+  return (
+    <div>
+      <h2>Recent Projects</h2>
+      <ul>
+        {recentProjects.map(project => (
+          <li key={project._id}>{project.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+```typescript Single Project
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { Id } from "../convex/_generated/dataModel";
+
+function ProjectDetail({ projectId }: { projectId: Id<"projects"> }) {
+  const project = useQuery(api.projects.getById, { id: projectId });
+  
+  if (project === undefined) {
+    return <div>Loading...</div>;
+  }
+  
+  if (project === null) {
+    return <div>Project not found</div>;
+  }
+  
+  return (
+    <div>
+      <h1>{project.name}</h1>
+      <p>Created: {new Date(project._creationTime).toLocaleDateString()}</p>
+      <p>Updated: {new Date(project.updatedAt).toLocaleDateString()}</p>
+      {project.settings && (
+        <div>
+          <h3>Settings</h3>
+          {project.settings.installCommand && (
+            <p>Install: {project.settings.installCommand}</p>
+          )}
+          {project.settings.devCommand && (
+            <p>Dev: {project.settings.devCommand}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+```typescript Server Action
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "../convex/_generated/api";
+
+const client = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+
+// Must be called with user authentication context
+async function getProjectsForUser() {
+  const projects = await client.query(api.projects.get, {});
+  return projects;
+}
+```
+</CodeGroup>
+
+## Example Response
+
+```json All Projects
+[
+  {
+    "_id": "jd7x8k9m2n5p6q8r",
+    "_creationTime": 1709989200000,
+    "name": "happy-dolphin-blue",
+    "ownerId": "user_2abc123def456",
+    "updatedAt": 1709995600000,
+    "settings": {
+      "installCommand": "npm install",
+      "devCommand": "npm run dev"
+    }
+  },
+  {
+    "_id": "kf8y9l0n3o6p7q9s",
+    "_creationTime": 1709982000000,
+    "name": "brave-tiger-green",
+    "ownerId": "user_2abc123def456",
+    "updatedAt": 1709988400000,
+    "importStatus": "completed",
+    "exportRepoUrl": "https://github.com/username/brave-tiger-green"
+  },
+  {
+    "_id": "lg9z0m1o4p7q8r0t",
+    "_creationTime": 1709975000000,
+    "name": "clever-owl-purple",
+    "ownerId": "user_2abc123def456",
+    "updatedAt": 1709981200000,
+    "exportStatus": "exporting"
+  }
+]
+```
+
+## Error Handling
+
+### Unauthorized Access
+
+If the user is not authenticated, the Convex query will throw an authentication error:
+
+```typescript
+try {
+  const projects = await client.query(api.projects.get, {});
+} catch (error) {
+  // Error: Unauthenticated access
+  console.error(error);
+}
+```
+
+### Project Not Found (Single Query)
+
+When querying a single project that doesn't exist or doesn't belong to the user:
+
+```typescript
+const project = useQuery(api.projects.getById, { id: projectId });
+
+if (project === null) {
+  // Project not found or unauthorized
+}
+```
+
+## Implementation Details
+
+### Indexing
+
+Projects are indexed by `ownerId` for efficient querying:
+- Index name: `by_owner`
+- Indexed field: `ownerId`
+- Query performance: O(log n) for user's projects
+
+### Ordering
+
+Results are ordered by `updatedAt` in descending order, ensuring the most recently modified projects appear first. This is useful for:
+- Dashboard displays showing recent activity
+- "Continue where you left off" functionality
+- Activity tracking and monitoring
+
+### Real-time Updates
+
+Convex queries are reactive and automatically update when:
+- A new project is created
+- A project is renamed or updated
+- A project is deleted
+- Project settings are modified
+- Import/export status changes
+
+No polling or manual refreshing is required - the UI updates automatically.
+
+## Related Endpoints
+
+- [Create Project with Prompt](/api/projects/create) - Create a new AI-generated project
+- [Update Project Settings](/api/projects/update) - Modify project configuration

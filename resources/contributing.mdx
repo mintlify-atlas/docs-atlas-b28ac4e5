@@ -1,0 +1,414 @@
+---
+title: Contributing Guide
+description: How to contribute to the Rushed AI open-source project
+icon: code-pull-request
+---
+
+## Welcome Contributors!
+
+Thank you for your interest in contributing to Rushed AI! This guide will help you get started with contributing to our open-source project.
+
+<Info>
+  All types of contributions are welcome and valued - from bug reports to code improvements to documentation updates.
+</Info>
+
+## Ways to Contribute
+
+<CardGroup cols={2}>
+  <Card title="Report Bugs" icon="bug">
+    Help us improve by reporting issues you encounter
+  </Card>
+  
+  <Card title="Suggest Features" icon="lightbulb">
+    Share ideas for new features and improvements
+  </Card>
+  
+  <Card title="Submit Code" icon="code">
+    Contribute bug fixes and new features
+  </Card>
+  
+  <Card title="Improve Docs" icon="book">
+    Help make our documentation clearer and more comprehensive
+  </Card>
+</CardGroup>
+
+## Before You Contribute
+
+<Note>
+  If you just want to support the project without coding:
+  
+  - Star the project on GitHub
+  - Share it on social media
+  - Reference it in your project's README
+  - Mention it at meetups or to colleagues
+</Note>
+
+## Getting Help
+
+Before asking questions:
+
+1. Read the [documentation](https://github.com/brayanj4y/rushed-ai?tab=readme-ov-file#rushed-documentation)
+2. Search [existing issues](https://github.com/brayanj4y/rushed-ai/issues)
+3. Search the internet for similar problems
+
+If you still need help:
+
+- Open a [new issue](https://github.com/brayanj4y/rushed-ai/issues/new)
+- Provide context about your problem
+- Include platform/version information (Node.js, npm, OS, etc.)
+
+## Reporting Bugs
+
+### Before Submitting a Bug Report
+
+<AccordionGroup>
+  <Accordion title="Investigation Checklist">
+    - Ensure you're using the latest version
+    - Verify it's a bug, not an environment issue
+    - Check if the bug is already reported
+    - Search Stack Overflow and other resources
+    - Collect detailed information about the bug
+  </Accordion>
+  
+  <Accordion title="Information to Collect">
+    - Stack trace or error messages
+    - OS, platform, and version
+    - Node.js, npm, and package versions
+    - Your input and the actual output
+    - Steps to reliably reproduce the issue
+  </Accordion>
+</AccordionGroup>
+
+### How to Submit a Bug Report
+
+<Warning>
+  **Security Issues**: Never report security vulnerabilities publicly. Email sensitive bugs to souopsylvain@gmail.com
+</Warning>
+
+1. Open a [new issue](https://github.com/brayanj4y/rushed-ai/issues/new)
+2. Use a clear, descriptive title
+3. Explain expected vs. actual behavior
+4. Provide detailed reproduction steps
+5. Include all collected information
+
+**What happens next:**
+
+- The team will label your issue
+- We'll attempt to reproduce it
+- If reproducible, it will be marked `needs-fix`
+- The issue is ready for implementation
+
+## Suggesting Enhancements
+
+### Before Suggesting an Enhancement
+
+1. Ensure you're on the latest version
+2. Check the documentation for existing functionality
+3. Search for similar suggestions
+4. Verify your idea fits the project's scope
+
+### How to Submit an Enhancement Suggestion
+
+1. Open a [GitHub issue](https://github.com/brayanj4y/rushed-ai/issues)
+2. Use a clear, descriptive title
+3. Provide step-by-step description
+4. Explain current vs. expected behavior
+5. Include screenshots or recordings if applicable
+6. Explain why it's useful to most users
+
+## Your First Code Contribution
+
+### Prerequisites
+
+<CardGroup cols={3}>
+  <Card title="Node.js" icon="node-js">
+    Version 18 or higher
+  </Card>
+  
+  <Card title="Git" icon="git">
+    For version control
+  </Card>
+  
+  <Card title="Code Editor" icon="code">
+    VS Code recommended
+  </Card>
+</CardGroup>
+
+### Setting Up Development Environment
+
+<Steps>
+  <Step title="Fork the Repository">
+    Create your own fork of the repository on GitHub.
+  </Step>
+  
+  <Step title="Clone Your Fork">
+    ```bash
+    git clone https://github.com/YOUR_USERNAME/rushed-ai.git
+    cd rushed-ai
+    ```
+  </Step>
+  
+  <Step title="Install Dependencies">
+    ```bash
+    npm install --legacy-peer-deps
+    ```
+  </Step>
+  
+  <Step title="Set Up Environment Variables">
+    Copy `.env.example` to `.env.local` and fill in required values:
+    
+    ```bash
+    cp .env.example .env.local
+    ```
+    
+    Required environment variables:
+    
+    ```env
+    # Convex
+    CONVEX_DEPLOYMENT=
+    NEXT_PUBLIC_CONVEX_URL=
+    NEXT_PUBLIC_CONVEX_SITE_URL=
+    RUSHED_CONVEX_INTERNAL_KEY=
+    CONVEX_DEPLOY_KEY=
+    
+    # Anthropic
+    ANTHROPIC_API_KEY=
+    
+    # Clerk Authentication
+    CLERK_JWT_ISSUER_DOMAIN=
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+    CLERK_SECRET_KEY=
+    
+    # Dodo Payments
+    DODO_PAYMENTS_ENVIRONMENT=test_mode
+    DODO_PAYMENTS_API_KEY=
+    DODO_WEBHOOK_KEY=
+    ```
+  </Step>
+  
+  <Step title="Set Up Convex">
+    ```bash
+    npx convex dev
+    ```
+    
+    This will set up your Convex backend and initialize the database schema.
+  </Step>
+  
+  <Step title="Start Development Server">
+    ```bash
+    npm run dev
+    ```
+    
+    The application will be running at `http://localhost:3000`.
+  </Step>
+</Steps>
+
+## Improving Documentation
+
+Documentation improvements are always welcome:
+
+- README.md improvements
+- Code comments and inline documentation
+- API documentation
+- Contributing guidelines
+- Installation and setup instructions
+
+**Documentation best practices:**
+
+- Use clear, concise language
+- Include code examples where relevant
+- Add screenshots for UI-related changes
+- Ensure proper markdown formatting
+- Keep documentation synchronized with code changes
+
+## Code Style Guidelines
+
+### General Code Style
+
+<CardGroup cols={2}>
+  <Card title="TypeScript" icon="t">
+    Use TypeScript for all new code with proper typing
+  </Card>
+  
+  <Card title="ES6+" icon="js">
+    Use modern JavaScript features when possible
+  </Card>
+  
+  <Card title="Naming" icon="signature">
+    Use meaningful variable and function names
+  </Card>
+  
+  <Card title="Formatting" icon="align-left">
+    Follow existing code formatting style
+  </Card>
+</CardGroup>
+
+### Component Guidelines
+
+```typescript
+// Use functional components with hooks
+import { useState } from 'react';
+
+interface MyComponentProps {
+  title: string;
+  count?: number;
+}
+
+export function MyComponent({ title, count = 0 }: MyComponentProps) {
+  const [value, setValue] = useState(count);
+  
+  return (
+    <div>
+      <h1>{title}</h1>
+      <p>Count: {value}</p>
+    </div>
+  );
+}
+```
+
+**Component best practices:**
+
+- Use functional components with hooks
+- Keep components small and focused
+- Use proper prop typing with TypeScript
+- Follow file naming: `kebab-case.tsx`
+- Place components in appropriate directories
+
+## Git Workflow
+
+### Branch Naming
+
+```bash
+# Feature branches
+feature/user-authentication
+feature/export-to-github
+
+# Bug fix branches
+fix/login-validation
+fix/credit-calculation
+
+# Documentation branches
+docs/api-reference
+docs/setup-guide
+```
+
+### Commit Messages
+
+Follow these guidelines:
+
+1. Use present tense: "Add feature" not "Added feature"
+2. Use imperative mood: "Move cursor to..." not "Moves cursor to..."
+3. Limit first line to 72 characters
+4. Reference issues and PRs after the first line
+
+**Optional commit emoji guide:**
+
+- ✨ `:sparkles:` - New feature
+- 🐛 `:bug:` - Bug fix
+- 📚 `:books:` - Documentation
+- ♻️ `:recycle:` - Refactoring
+- 🎨 `:art:` - Code formatting/structure
+- ⚡️ `:zap:` - Performance improvement
+- 🔒 `:lock:` - Security
+
+### Example Workflow
+
+```bash
+# Create a new branch
+git checkout -b feature/new-export-option
+
+# Make changes and commit
+git add .
+git commit -m "Add CSV export option for project files"
+
+# Push to your fork
+git push origin feature/new-export-option
+
+# Open a pull request on GitHub
+```
+
+## Pull Request Process
+
+<Steps>
+  <Step title="Create a Feature Branch">
+    Create a new branch for your changes from `main`.
+  </Step>
+  
+  <Step title="Make Your Changes">
+    Implement your feature or fix with clear, focused commits.
+  </Step>
+  
+  <Step title="Test Thoroughly">
+    Ensure all existing tests pass and add new tests for your changes.
+  </Step>
+  
+  <Step title="Update Documentation">
+    Update relevant documentation to reflect your changes.
+  </Step>
+  
+  <Step title="Submit Pull Request">
+    Open a PR with a clear description of your changes and link any related issues.
+  </Step>
+  
+  <Step title="Respond to Feedback">
+    Address any review comments and make requested changes.
+  </Step>
+</Steps>
+
+<Note>
+  Keep pull requests focused on a single change. If you have multiple unrelated improvements, submit separate PRs.
+</Note>
+
+## Legal Notice
+
+<Warning>
+  By contributing to this project, you agree that:
+  
+  - You have authored 100% of the content
+  - You have the necessary rights to the content
+  - Your contribution may be provided under the project license
+</Warning>
+
+## Code of Conduct
+
+Be respectful and constructive:
+
+- Use welcoming and inclusive language
+- Respect differing viewpoints and experiences
+- Accept constructive criticism gracefully
+- Focus on what's best for the community
+- Show empathy towards other community members
+
+## Getting Recognition
+
+Contributors are recognized in:
+
+- GitHub contributors list
+- Release notes for significant contributions
+- Project README for major features
+
+## Need Help?
+
+<CardGroup cols={2}>
+  <Card title="Ask Questions" icon="comments" href="https://github.com/brayanj4y/rushed-ai/issues">
+    Open an issue for questions or clarifications
+  </Card>
+  
+  <Card title="View Examples" icon="code" href="https://github.com/brayanj4y/rushed-ai">
+    Browse existing code for examples
+  </Card>
+  
+  <Card title="Read Docs" icon="book" href="/introduction">
+    Explore the full documentation
+  </Card>
+  
+  <Card title="Contact Maintainers" icon="envelope" href="mailto:souopsylvain@gmail.com">
+    Reach out to the core team
+  </Card>
+</CardGroup>
+
+---
+
+<Info>
+  This contributing guide is adapted from the [Atom](https://github.com/atom/atom/blob/master/CONTRIBUTING.md) contributing guide and generated by [contributing.md](https://contributing.md/generator).
+</Info>

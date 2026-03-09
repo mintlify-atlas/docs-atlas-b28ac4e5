@@ -1,0 +1,279 @@
+---
+title: "API Overview"
+description: "Introduction to the Rushed AI API and Convex backend"
+---
+
+## Welcome to the Rushed AI API
+
+Rushed AI provides two types of APIs for interacting with the platform:
+
+1. **REST API Endpoints** - HTTP endpoints for project creation and GitHub export
+2. **Convex Backend** - Real-time database queries and mutations for files, conversations, and project management
+
+## API Architecture
+
+<CardGroup cols={2}>
+  <Card title="REST API" icon="globe" href="/api/projects/create">
+    Standard HTTP endpoints for specific operations like project creation and GitHub export
+  </Card>
+  <Card title="Convex Backend" icon="database" href="/integrations/convex-backend">
+    Real-time database with reactive queries and mutations for core data operations
+  </Card>
+</CardGroup>
+
+## Base URLs
+
+<Note>
+  Most of the Rushed AI platform runs on Convex, a real-time database with built-in API capabilities. Only a few operations use traditional REST endpoints.
+</Note>
+
+### REST API Endpoints
+```
+https://your-app.vercel.app/api
+```
+
+### Convex Backend
+```
+https://your-convex-deployment.convex.cloud
+```
+
+Your Convex deployment URL is available in your environment as `NEXT_PUBLIC_CONVEX_URL`.
+
+## Making Requests
+
+### REST API
+
+For REST endpoints, send standard HTTP requests with JSON payloads:
+
+```bash
+curl -X POST https://your-app.vercel.app/api/projects/create-with-prompt \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_CLERK_TOKEN" \
+  -d '{
+    "prompt": "Create a todo app with React",
+    "source": "dashboard"
+  }'
+```
+
+### Convex Backend
+
+For Convex operations, use the Convex client library:
+
+```typescript
+import { useQuery, useMutation } from "convex/react"
+import { api } from "../convex/_generated/api"
+
+// Query data
+const projects = useQuery(api.projects.list)
+
+// Mutate data
+const createProject = useMutation(api.projects.create)
+await createProject({ name: "My Project" })
+```
+
+## Authentication
+
+All API requests require authentication via [Clerk](/api/authentication). See the [Authentication](/api/authentication) guide for details on obtaining and using tokens.
+
+## Rate Limits
+
+<Warning>
+  Rate limits are enforced through the credit system. Each API operation consumes credits based on AI usage and resource consumption.
+</Warning>
+
+### Credit-Based Limits
+
+- **Daily Credit Cap**: Varies by subscription plan (Starter: 10, Pro: 40, Scale: 150)
+- **Daily Token Limit**: Varies by plan (Starter: 100k, Pro: 500k, Scale: 2M)
+- **Model Costs**: Claude Sonnet 4.5 costs $3.00 per million input tokens, $15.00 per million output tokens
+
+See [Credits](/resources/credits) for detailed pricing information.
+
+## Error Handling
+
+### REST API Errors
+
+REST endpoints return standard HTTP status codes:
+
+| Status Code | Description |
+|-------------|-------------|
+| `200` | Success |
+| `400` | Bad Request - Invalid parameters |
+| `401` | Unauthorized - Missing or invalid authentication |
+| `403` | Forbidden - Insufficient credits or permissions |
+| `404` | Not Found |
+| `500` | Internal Server Error |
+
+### Error Response Format
+
+```json
+{
+  "error": "Error message",
+  "code": "error_code",
+  "details": {}
+}
+```
+
+### Common Error Codes
+
+<AccordionGroup>
+  <Accordion title="insufficient_credits">
+    The user has run out of credits. They need to purchase credits or upgrade their subscription.
+    
+    ```json
+    {
+      "error": "Insufficient credits",
+      "code": "insufficient_credits"
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="daily_cap_exceeded">
+    The user has exceeded their daily credit cap. They need to wait until the next day or upgrade their plan.
+    
+    ```json
+    {
+      "error": "Daily credit cap exceeded",
+      "code": "daily_cap_exceeded"
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="subscription_inactive">
+    The user's subscription is inactive (cancelled or past due). They need to reactivate their subscription.
+    
+    ```json
+    {
+      "error": "Subscription inactive",
+      "code": "subscription_inactive"
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="invalid_prompt">
+    The prompt is empty or invalid. Prompts must be at least 1 character long.
+    
+    ```json
+    {
+      "error": "Prompt is required",
+      "code": "invalid_prompt"
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Convex Errors
+
+Convex functions throw errors with descriptive messages:
+
+```typescript
+try {
+  await createProject({ name: "" })
+} catch (error) {
+  // Error: "Name is required"
+  console.error(error.message)
+}
+```
+
+## Response Format
+
+### REST API Responses
+
+Successful REST responses return JSON:
+
+```json
+{
+  "projectId": "k1234567890abcdef",
+  "message": "Project created successfully"
+}
+```
+
+### Convex Responses
+
+Convex queries and mutations return strongly-typed data:
+
+```typescript
+// Query returns array of projects
+const projects = await ctx.db.query("projects").collect()
+
+// Mutation returns the created document ID
+const projectId = await ctx.db.insert("projects", { name: "My Project" })
+```
+
+## API Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Projects" icon="folder" href="/api/projects/create">
+    Create and manage projects
+  </Card>
+  <Card title="Files" icon="file" href="/api/files/list">
+    CRUD operations for project files
+  </Card>
+  <Card title="Conversations" icon="messages" href="/api/conversations/create">
+    AI chat conversations and messages
+  </Card>
+</CardGroup>
+
+## SDK and Libraries
+
+### JavaScript/TypeScript
+
+Rushed AI uses the official Convex client libraries:
+
+<CodeGroup>
+
+```bash npm
+npm install convex
+```
+
+```bash yarn
+yarn add convex
+```
+
+```bash pnpm
+pnpm add convex
+```
+
+</CodeGroup>
+
+### React Integration
+
+For React applications, use Convex React hooks:
+
+```typescript
+import { ConvexProvider, ConvexReactClient } from "convex/react"
+import { api } from "../convex/_generated/api"
+
+const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
+
+function App() {
+  return (
+    <ConvexProvider client={convex}>
+      <YourApp />
+    </ConvexProvider>
+  )
+}
+```
+
+## Webhooks
+
+Rushed AI supports webhooks for payment events via Dodo Payments. See the webhook implementation in the source code for details.
+
+## Support
+
+Need help with the API? Check out these resources:
+
+<CardGroup cols={2}>
+  <Card title="FAQ" icon="question" href="/resources/faq">
+    Common questions and answers
+  </Card>
+  <Card title="Contributing" icon="code" href="/resources/contributing">
+    Contribute to the project
+  </Card>
+  <Card title="GitHub" icon="github" href="https://github.com/brayanj4y/rushed-ai">
+    View the source code
+  </Card>
+  <Card title="Contact" icon="envelope" href="mailto:souopsylvain@gmail.com">
+    Get in touch
+  </Card>
+</CardGroup>

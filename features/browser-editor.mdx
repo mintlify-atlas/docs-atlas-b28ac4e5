@@ -1,0 +1,449 @@
+---
+title: Browser Editor
+description: Powerful CodeMirror 6 based editor with syntax highlighting, minimap, and intelligent code selection
+icon: code
+---
+
+## Overview
+
+Rushed AI features a modern, browser-based code editor built on **CodeMirror 6**. The editor provides a professional development experience with syntax highlighting, a minimap for navigation, indentation markers, and intelligent code selection tools.
+
+<Note>
+The editor is optimized for web development with support for JavaScript, TypeScript, React (JSX/TSX), HTML, CSS, JSON, Markdown, and Python.
+</Note>
+
+## Core Features
+
+<CardGroup cols={2}>
+  <Card title="Syntax Highlighting" icon="palette">
+    Language-aware highlighting for JavaScript, TypeScript, JSX/TSX, HTML, CSS, JSON, Markdown, and Python.
+  </Card>
+  
+  <Card title="Minimap" icon="map">
+    Scrollable minimap overview of your entire file for quick navigation through large files.
+  </Card>
+  
+  <Card title="Indentation Markers" icon="indent">
+    Visual guides showing indentation levels for better code structure visibility.
+  </Card>
+  
+  <Card title="Code Selection Tools" icon="hand-pointer">
+    Select code to add to chat or use Quick Edit (⌘E) for AI-powered inline editing.
+  </Card>
+  
+  <Card title="Auto-save" icon="floppy-disk">
+    Changes are automatically saved after 1.5 seconds of inactivity.
+  </Card>
+  
+  <Card title="Theme Support" icon="moon">
+    Automatically switches between light and dark themes based on system preferences.
+  </Card>
+</CardGroup>
+
+## Editor Implementation
+
+The editor is implemented as a React component with CodeMirror 6:
+
+```tsx
+import { EditorView, keymap } from "@codemirror/view";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { indentWithTab } from "@codemirror/commands";
+import { indentationMarkers } from "@replit/codemirror-indentation-markers";
+
+const view = new EditorView({
+  doc: initialValue,
+  parent: editorRef.current,
+  extensions: [
+    ...themeExtensions,
+    customSetup,
+    languageExtension,
+    quickEdit(fileName),
+    selectionTooltip(fileName),
+    keymap.of([indentWithTab]),
+    minimap(),
+    indentationMarkers(),
+    EditorView.updateListener.of((update) => {
+      if (update.docChanged) {
+        onChange(update.state.doc.toString());
+      }
+    }),
+  ],
+});
+```
+
+## Language Support
+
+The editor automatically detects file types and applies appropriate syntax highlighting:
+
+```typescript
+export const getLanguageExtension = (filename: string): Extension => {
+  const ext = filename.split(".").pop()?.toLowerCase();
+
+  switch(ext) {
+    case "js":
+      return javascript();
+    case "jsx":
+      return javascript({ jsx: true });
+    case "ts":
+      return javascript({ typescript: true });
+    case "tsx":
+      return javascript({ typescript: true, jsx: true });
+    case "html":
+      return html();
+    case "css":
+      return css();
+    case "json":
+      return json();
+    case "md":
+    case "mdx":
+      return markdown();
+    case "py":
+      return python();
+    default:
+      return [];
+  }
+};
+```
+
+<Accordion title="Supported File Extensions">
+- **JavaScript**: `.js` (with ES6+ syntax)
+- **JSX**: `.jsx` (React components)
+- **TypeScript**: `.ts` (full type checking syntax)
+- **TSX**: `.tsx` (TypeScript + React)
+- **HTML**: `.html`
+- **CSS**: `.css`
+- **JSON**: `.json` (with validation)
+- **Markdown**: `.md`, `.mdx`
+- **Python**: `.py`
+</Accordion>
+
+## Custom Setup
+
+The editor includes a comprehensive set of features via the `customSetup` extension:
+
+```typescript
+export const customSetup: Extension = (() => [
+  lineNumbers(),
+  highlightActiveLineGutter(),
+  highlightSpecialChars(),
+  history(),
+  foldGutter({
+    markerDOM(open) {
+      const icon = document.createElement("div");
+      icon.className = "flex items-center justify-center size-4 cursor-pointer pt-0.5";
+      icon.innerHTML = open ? chevronDownSvg : chevronRightSvg;
+      return icon;
+    },
+  }),
+  drawSelection(),
+  dropCursor(),
+  EditorState.allowMultipleSelections.of(true),
+  indentOnInput(),
+  syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+  bracketMatching(),
+  closeBrackets(),
+  autocompletion(),
+  rectangularSelection(),
+  crosshairCursor(),
+  highlightActiveLine(),
+  highlightSelectionMatches(),
+  keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, ...foldKeymap, ...completionKeymap, ...lintKeymap]),
+])();
+```
+
+### Included Features
+
+<Steps>
+  <Step title="Line Numbers">
+    Gutter with line numbers on the left side of the editor.
+  </Step>
+  
+  <Step title="Active Line Highlight">
+    The current line is highlighted for easy tracking.
+  </Step>
+  
+  <Step title="Code Folding">
+    Collapse and expand code blocks using custom chevron icons in the gutter.
+  </Step>
+  
+  <Step title="Undo/Redo">
+    Full history support with standard keyboard shortcuts.
+  </Step>
+  
+  <Step title="Bracket Matching">
+    Matching brackets are highlighted when cursor is adjacent.
+  </Step>
+  
+  <Step title="Auto-close Brackets">
+    Automatically closes brackets, quotes, and parentheses.
+  </Step>
+  
+  <Step title="Autocompletion">
+    Context-aware code completion suggestions.
+  </Step>
+  
+  <Step title="Multiple Selections">
+    Hold Cmd/Ctrl to create multiple cursors.
+  </Step>
+  
+  <Step title="Rectangular Selection">
+    Alt+drag to select rectangular regions of text.
+  </Step>
+  
+  <Step title="Search & Replace">
+    Built-in search functionality with regex support.
+  </Step>
+</Steps>
+
+## Minimap
+
+The minimap provides a bird's-eye view of your code:
+
+```typescript
+import { showMinimap } from "@replit/codemirror-minimap";
+
+export const minimap = () => [
+  showMinimap.compute(["doc"], () => {
+    return {
+      create: () => {
+        const dom = document.createElement("div");
+        return { dom };
+      },
+    };
+  }),
+];
+```
+
+<Tip>
+The minimap is especially useful for navigating large files. Click anywhere on the minimap to jump to that section.
+</Tip>
+
+## Selection Tooltip
+
+When you select code, a tooltip appears with two options:
+
+```typescript
+const createTooltipForSelection = (state: EditorState, fileName: string) => {
+  const selection = state.selection.main;
+  
+  if (selection.empty) {
+    return [];  // No selection
+  }
+  
+  return [{
+    pos: selection.to,
+    above: false,
+    create() {
+      const dom = document.createElement("div");
+      dom.className = "bg-popover text-popover-foreground z-50 rounded-sm border ...";
+      
+      // Add "Add to Chat" button
+      const addToChatButton = document.createElement("button");
+      addToChatButton.textContent = "Add to Chat";
+      addToChatButton.onclick = () => {
+        const selectedText = state.doc.sliceString(selection.from, selection.to);
+        window.dispatchEvent(new CustomEvent("rushed:add-to-chat", {
+          detail: { text: selectedText, fileName }
+        }));
+      };
+      
+      // Add "Quick Edit" button with ⌘E shortcut
+      const quickEditButton = document.createElement("button");
+      quickEditButton.textContent = "Quick Edit ⌘E";
+      quickEditButton.onclick = () => {
+        editorView.dispatch({
+          effects: showQuickEditEffect.of(true)
+        });
+      };
+      
+      dom.appendChild(addToChatButton);
+      dom.appendChild(quickEditButton);
+      return { dom };
+    }
+  }];
+};
+```
+
+<CardGroup cols={2}>
+  <Card title="Add to Chat" icon="comments">
+    Sends the selected code to the AI chat with file context, allowing you to ask questions about specific code.
+  </Card>
+  
+  <Card title="Quick Edit (⌘E)" icon="wand-magic-sparkles">
+    Opens an inline AI editing interface to modify the selected code with natural language instructions.
+  </Card>
+</CardGroup>
+
+## Auto-save Mechanism
+
+Changes are automatically saved using a debounced approach:
+
+```tsx
+const DEBOUNCE_MS = 1500;
+const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+<CodeEditor
+  fileName={activeFile.name}
+  initialValue={activeFile.content}
+  onChange={(content: string) => {
+    // Clear existing timer
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    
+    // Set new timer
+    timeoutRef.current = setTimeout(() => {
+      updateFile({ id: activeFile._id, content });
+    }, DEBOUNCE_MS);
+  }}
+/>
+```
+
+<Note>
+The 1.5-second debounce prevents excessive database writes while still providing a responsive auto-save experience.
+</Note>
+
+## Theme System
+
+The editor adapts to your system theme:
+
+```typescript
+const { resolvedTheme } = useTheme();
+
+const themeExtensions = useMemo(() => {
+  return resolvedTheme === "dark" 
+    ? [oneDark, customTheme] 
+    : [customTheme];
+}, [resolvedTheme]);
+```
+
+- **Dark Mode**: Uses CodeMirror's `oneDark` theme plus custom styling
+- **Light Mode**: Uses only custom theme with light color scheme
+- **Auto-switching**: Updates when system theme changes
+
+## File Breadcrumbs
+
+The editor displays breadcrumb navigation for nested files:
+
+```
+src > components > ui > button.tsx
+```
+
+Breadcrumbs are built by traversing the parent chain:
+
+```typescript
+const path: { _id: string; name: string }[] = [];
+let currentId: Id<"files"> | undefined = fileId;
+
+while (currentId) {
+  const file = await ctx.db.get("files", currentId);
+  if (!file) break;
+  
+  path.unshift({ _id: file._id, name: file.name });
+  currentId = file.parentId;
+}
+
+return path;  // ["src", "components", "ui", "button.tsx"]
+```
+
+## Keyboard Shortcuts
+
+The editor supports standard keyboard shortcuts:
+
+<Accordion title="View All Shortcuts">
+| Shortcut | Action |
+|----------|--------|
+| `⌘K` / `Ctrl+K` | Open command palette |
+| `Tab` | Indent line or selection |
+| `Shift+Tab` | Outdent line or selection |
+| `⌘Z` / `Ctrl+Z` | Undo |
+| `⌘Shift+Z` / `Ctrl+Y` | Redo |
+| `⌘F` / `Ctrl+F` | Find |
+| `⌘G` / `Ctrl+G` | Find next |
+| `⌘Shift+G` / `Ctrl+Shift+G` | Find previous |
+| `⌘H` / `Ctrl+H` | Replace |
+| `⌘D` / `Ctrl+D` | Select next occurrence |
+| `⌘/` / `Ctrl+/` | Toggle comment |
+| `⌘]` / `Ctrl+]` | Indent more |
+| `⌘[` / `Ctrl+[` | Indent less |
+| `⌘E` / `Ctrl+E` | Quick Edit (when text selected) |
+</Accordion>
+
+## Binary File Handling
+
+The editor gracefully handles binary and unsupported files:
+
+```tsx
+const isActiveFileBinary = activeFile && activeFile.storageId;
+
+{isActiveFileBinary && (
+  <div className="size-full flex items-center justify-center">
+    <div className="flex flex-col items-center gap-2.5 max-w-md text-center">
+      <AlertIcon className="size-10 text-yellow-500" />
+      <p className="text-sm">
+        The file is not displayed in the text editor because it is either 
+        binary or uses an unsupported text encoding.
+      </p>
+    </div>
+  </div>
+)}
+```
+
+<Tip>
+Files with a `storageId` are stored as binary blobs in Convex storage rather than as text content.
+</Tip>
+
+## Empty State
+
+When no file is open, the editor shows helpful tips:
+
+```tsx
+<div className="size-full flex items-center justify-center flex-col gap-6">
+  <span className="text-8xl opacity-45 font-logo select-none">Rushed</span>
+  <div className="flex gap-8 text-muted-foreground/60 text-sm">
+    <div className="flex items-center gap-2">
+      <kbd>@</kbd>
+      <span>Type @ to tag files</span>
+    </div>
+    <div className="flex items-center gap-2">
+      <kbd>Select</kbd>
+      <span>Select code to chat</span>
+    </div>
+    <div className="flex items-center gap-2">
+      <kbd>⌘ K</kbd>
+      <span>Search projects</span>
+    </div>
+  </div>
+</div>
+```
+
+## Performance Optimizations
+
+<Steps>
+  <Step title="Memoized Extensions">
+    Language and theme extensions are memoized to prevent unnecessary re-renders.
+  </Step>
+  
+  <Step title="Debounced Saves">
+    Auto-save is debounced to reduce database writes during active editing.
+  </Step>
+  
+  <Step title="Key-based Remounting">
+    Editor remounts when switching files using the file ID as the React key.
+  </Step>
+  
+  <Step title="Cleanup on Unmount">
+    Editor view is properly destroyed when the component unmounts to prevent memory leaks.
+  </Step>
+</Steps>
+
+```typescript
+useEffect(() => {
+  const view = new EditorView({ /* ... */ });
+  viewRef.current = view;
+  
+  return () => {
+    view.destroy();  // Cleanup
+  };
+}, [languageExtension, themeExtensions, fileName]);
+```
