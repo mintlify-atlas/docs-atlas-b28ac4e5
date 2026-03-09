@@ -1,0 +1,132 @@
+{
+  "projectType": "saas",
+  "projectName": "Rushed AI",
+  "projectDescription": "An AI-powered web application builder that turns natural language prompts into working code in your browser.",
+  "theme": "mint",
+  "primaryColor": "#d5392a",
+  "lightColor": "#324f74",
+  "darkColor": "#d7e3ee",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/ai-code-generation",
+              "features/browser-editor",
+              "features/project-management",
+              "features/live-preview"
+            ]
+          },
+          {
+            "group": "Usage Guides",
+            "pages": [
+              "guides/creating-projects",
+              "guides/working-with-ai",
+              "guides/editing-code",
+              "guides/managing-files",
+              "guides/exporting-projects"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/github-export",
+              "integrations/clerk-auth",
+              "integrations/convex-backend"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Projects",
+            "pages": [
+              "api/projects/create",
+              "api/projects/list",
+              "api/projects/update"
+            ]
+          },
+          {
+            "group": "Files",
+            "pages": [
+              "api/files/list",
+              "api/files/read",
+              "api/files/create",
+              "api/files/update",
+              "api/files/delete"
+            ]
+          },
+          {
+            "group": "Conversations",
+            "pages": [
+              "api/conversations/create",
+              "api/conversations/list",
+              "api/conversations/messages"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Additional Info",
+            "pages": [
+              "resources/pricing",
+              "resources/credits",
+              "resources/faq",
+              "resources/contributing"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "AI-powered code generation using Claude Sonnet 4",
+    "Browser-based code editor with syntax highlighting",
+    "Live preview of web applications",
+    "Project and file management system",
+    "AI chat interface for conversational development",
+    "GitHub export integration",
+    "Credit-based pricing with subscription tiers",
+    "User authentication via Clerk",
+    "Real-time code editing with WebContainer API"
+  ],
+  "publicApiSurface": [
+    "POST /api/projects/create-with-prompt",
+    "POST /api/projects/export",
+    "GET /api/projects",
+    "POST /api/messages/send",
+    "GET /api/conversations",
+    "POST /api/files/create",
+    "PUT /api/files/update",
+    "DELETE /api/files/delete",
+    "convex.projects.create",
+    "convex.projects.list",
+    "convex.files.listByProject",
+    "convex.files.create",
+    "convex.files.update",
+    "convex.conversations.create",
+    "convex.conversations.listByProject"
+  ]
+}
